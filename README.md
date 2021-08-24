@@ -104,5 +104,5 @@ Distributed under the Apache License.
 
 <!-- CONTACT -->
 ## Contact
-- @payall4u // TODO
 - @xiaoxubeii xiaoxubeii@gmail.com
+- @payall4u payall4u@qq.com
