@@ -1,0 +1,42 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: nano-gpu-scheduler
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nano-gpu-scheduler
+  template:
+    metadata:
+      labels:
+        app: nano-gpu-scheduler
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+    spec:
+      hostNetwork: true
+      serviceAccount: nano-gpu
+      containers:
+        - name: nano-gpu-scheduler
+          image: nano-gpu-scheduler
+          command: ["/usr/bin/nano-gpu-scheduler", "nano-gpu-scheduler"]
+          args: ["-priority", "binpack"]
+          env:
+            - name: PORT
+              value: "12345"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nano-gpu-scheduler
+  namespace: kube-system
+  labels:
+    app: nano-gpu-scheduler
+spec:
+  ports:
+    - port: 12345
+      name: http
+      targetPort: 12345
+  selector:
+    app: nano-gpu-scheduler
