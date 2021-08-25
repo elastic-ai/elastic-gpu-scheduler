@@ -1,4 +1,5 @@
 # Nano GPU Scheduler
+![](static/linkedin_banner_image_1.png)
 <!-- ABOUT THE PROJECT -->
 ## About This Project
 With the continuous evolution of cloud native AI scenarios, more and more users run AI tasks on Kubernetes, which also brings more and more challenges to GPU resource scheduling. 
