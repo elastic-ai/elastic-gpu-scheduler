@@ -2,19 +2,17 @@ package scheduler
 
 import (
 	"context"
+
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 
-	"github.com/nano-gpu/nano-gpu-scheduler/pkg/cache"
-
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	extender "k8s.io/kube-scheduler/extender/v1"
 )
 
 type Prioritize struct {
-	Name  string
-	Func  func(pod *v1.Pod, nodeNames []string) (*extender.HostPriorityList, error)
-	cache *cache.SchedulerCache
+	Name string
+	Func func(pod *v1.Pod, nodeNames []string) (*extender.HostPriorityList, error)
 }
 
 func (p Prioritize) Handler(args extender.ExtenderArgs) (*extender.HostPriorityList, error) {

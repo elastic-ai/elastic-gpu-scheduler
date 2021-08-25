@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nano-gpu/nano-gpu-scheduler/pkg/cache"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/controller"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/routes"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/scheduler"
@@ -25,8 +24,9 @@ import (
 const RecommendedKubeConfigPathEnv = "KUBECONFIG"
 
 var (
-	clientset    *kubernetes.Clientset
-	resyncPeriod = 30 * time.Second
+	clientset         *kubernetes.Clientset
+	resyncPeriod      = 30 * time.Second
+	PriorityAlgorithm string
 )
 
 func initKubeClient() {
@@ -51,7 +51,7 @@ func initKubeClient() {
 }
 
 func InitFlag() {
-	flag.StringVar(&cache.PriorityAlgorithm, "priority", "binpack", "priority algorithm, binpack/spread/random")
+	flag.StringVar(&PriorityAlgorithm, "priority", "binpack", "priority algorithm, binpack/spread/random")
 }
 
 func main() {
@@ -60,7 +60,7 @@ func main() {
 	log.InitFlags(nil)
 	flag.Parse()
 
-	log.Info("Priority algorithm is ", cache.PriorityAlgorithm)
+	log.Info("Priority algorithm is ", PriorityAlgorithm)
 
 	threadness := StringToInt(os.Getenv("THREADNESS"))
 
