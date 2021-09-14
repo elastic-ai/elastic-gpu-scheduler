@@ -95,9 +95,12 @@ spec:
 
 <!-- ROADMAP -->
 ## Roadmap
-- Integrate with nvidia-docker and support gpushare
-- Support Kubernetes scheduler framework
-- Push Kubernetes community to improve device plugin mechanism to support multiple resources
+- Support GPU share
+- Support GPU monitor at pod and container level
+- Support single container multi-card scheduling
+- Support GPU topology-aware scheduling
+- Support GPU load-aware scheduling
+- Migrate to Kubernetes scheduler framework
 
 <!-- LICENSE -->
 ## License
