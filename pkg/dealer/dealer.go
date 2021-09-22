@@ -3,7 +3,9 @@ package dealer
 import (
 	"context"
 	"fmt"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/metrics"
 	"sync"
+	"time"
 
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
@@ -92,6 +94,7 @@ func (d *DealerImpl) Assume(nodes []string, pod *v1.Pod) ([]bool, []error) {
 		ch <- i
 	}
 
+	start := time.Now()
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func() {
@@ -113,6 +116,7 @@ func (d *DealerImpl) Assume(nodes []string, pod *v1.Pod) ([]bool, []error) {
 		}()
 	}
 	wg.Wait()
+	metrics.NanoGPUSchedulingLatency.Observe(metrics.SinceInSeconds(start))
 	return ans, res
 }
 

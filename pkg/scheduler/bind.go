@@ -3,8 +3,10 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/metrics"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,13 +39,17 @@ func NewNanoGPUBind(ctx context.Context, clientset *kubernetes.Clientset, d deal
 	return &Bind{
 		Name: "NanoGPUBinder",
 		Func: func(name string, namespace string, podUID types.UID, node string, d dealer.Dealer) error {
+			now := time.Now()
+
 			pod, err := getPod(ctx, name, namespace, podUID, clientset)
 			if err != nil {
 				log.Warningf("warn: Failed to handle pod %s in ns %s due to error %v", name, namespace, err)
 				return err
 			}
 
-			return d.Bind(node, pod)
+			bind := d.Bind(node, pod)
+			metrics.NanoGPUBindingLatency.Observe(metrics.SinceInSeconds(now))
+			return bind
 		},
 		Dealer: d,
 	}

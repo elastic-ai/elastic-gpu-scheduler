@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"context"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/metrics"
+	"time"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 
@@ -25,6 +27,7 @@ func NewNanoGPUPrioritize(ctx context.Context, clientset *kubernetes.Clientset, 
 	return &Prioritize{
 		Name: "NanoGPUSorter",
 		Func: func(pod *v1.Pod, nodeNames []string) (*extender.HostPriorityList, error) {
+			start := time.Now()
 			var priorityList extender.HostPriorityList
 			priorityList = make([]extender.HostPriority, len(nodeNames))
 			scores := d.Score(nodeNames, pod)
@@ -34,6 +37,7 @@ func NewNanoGPUPrioritize(ctx context.Context, clientset *kubernetes.Clientset, 
 					Score: int64(score),
 				}
 			}
+			metrics.NanoGPUSortingLatency.Observe(metrics.SinceInSeconds(start))
 			return &priorityList, nil
 		},
 	}

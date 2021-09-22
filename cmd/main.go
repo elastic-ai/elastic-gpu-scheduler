@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/controller"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/metrics"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/routes"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/scheduler"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils/signals"
@@ -80,6 +81,8 @@ func main() {
 		return
 	}
 
+	metrics.Register()
+
 	go schudulerController.Run(threadness, stopCh)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -92,11 +95,14 @@ func main() {
 	router := httprouter.New()
 	routes.AddPProf(router)
 	routes.AddVersion(router)
+	routes.AddMetrics(router)
+
 	routes.AddPredicate(router, predicate)
 	routes.AddPrioritize(router, prioritize)
 	routes.AddBind(router, bind)
 
 	log.V(3).Infof("server starting on the port :%s", port)
+
 	if err := http.ListenAndServe(":"+port, router); err != nil {
 		log.Fatal(err)
 	}

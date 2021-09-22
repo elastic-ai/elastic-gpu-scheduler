@@ -10,6 +10,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/scheduler"
+	"k8s.io/component-base/metrics/legacyregistry"
 
 	log "k8s.io/klog/v2"
 	extender "k8s.io/kube-scheduler/extender/v1"
@@ -186,4 +187,8 @@ func AddBind(router *httprouter.Router, bind *scheduler.Bind) {
 	} else {
 		router.POST(bindPrefix, DebugLogging(BindRoute(bind), bindPrefix))
 	}
+}
+
+func AddMetrics(router *httprouter.Router) {
+	router.Handler("GET", "/metrics", legacyregistry.Handler())
 }
