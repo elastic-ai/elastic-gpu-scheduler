@@ -2,13 +2,14 @@ package dealer
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"strconv"
 	"testing"
 
-	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
+	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/types"
 )
 
 func TestGPUResource(t *testing.T) {
@@ -19,17 +20,17 @@ func TestGPUResource(t *testing.T) {
 	}
 	subTests := []Cases{
 		{
-			Origin: GPUResource{100, 20},
-			Target: GPUResource{80, 20},
-			Expect: GPUResource{20, 0},
+			Origin: GPUResource{100, 100},
+			Target: GPUResource{80, 100},
+			Expect: GPUResource{20, 100},
 		}, {
-			Origin: GPUResource{100, 20},
-			Target: GPUResource{20, 10},
-			Expect: GPUResource{80, 10},
+			Origin: GPUResource{100, 100},
+			Target: GPUResource{20, 100},
+			Expect: GPUResource{80, 100},
 		}, {
-			Origin: GPUResource{100, 20},
-			Target: GPUResource{0, 0},
-			Expect: GPUResource{100, 20},
+			Origin: GPUResource{100, 100},
+			Target: GPUResource{0, 100},
+			Expect: GPUResource{100, 100},
 		},
 	}
 	for _, tc := range subTests {
@@ -39,12 +40,12 @@ func TestGPUResource(t *testing.T) {
 
 	addTests := []Cases{
 		{
-			Origin: GPUResource{20, 0},
+			Origin: GPUResource{20, 100},
 			Target: GPUResource{80, 100},
 			Expect: GPUResource{100, 100},
 		}, {
-			Origin: GPUResource{10, 80},
-			Target: GPUResource{80, 20},
+			Origin: GPUResource{10, 100},
+			Target: GPUResource{80, 100},
 			Expect: GPUResource{90, 100},
 		},
 	}
@@ -56,23 +57,23 @@ func TestGPUResource(t *testing.T) {
 		{
 			Origin: GPUResource{100, 100},
 			Target: GPUResource{80, 100},
-			Expect: GPUResource{20, 0},
+			Expect: GPUResource{20, 100},
 		}, {
 			Origin: GPUResource{100, 100},
-			Target: GPUResource{80, 120},
-			Expect: GPUResource{100, 100},
+			Target: GPUResource{80, 100},
+			Expect: GPUResource{20, 100},
 		}, {
 			Origin: GPUResource{100, 100},
 			Target: GPUResource{100, 100},
-			Expect: GPUResource{0, 0},
+			Expect: GPUResource{0, 100},
 		}, {
 			Origin: GPUResource{100, 100},
 			Target: GPUResource{120, 100},
 			Expect: GPUResource{100, 100},
 		}, {
-			Origin: GPUResource{30, 30},
+			Origin: GPUResource{30, 100},
 			Target: GPUResource{100, 100},
-			Expect: GPUResource{30, 30},
+			Expect: GPUResource{30, 100},
 		},
 	}
 	for _, tc := range subIfAvailedTests {
@@ -86,17 +87,16 @@ func TestGPUResource(t *testing.T) {
 func MockPodWithPlan(plan *Plan) *v1.Pod {
 	pod := &v1.Pod{}
 	pod.Annotations = map[string]string{
-		utils.GPUAssume: "true",
+		types.GPUAssume: "true",
 	}
 
 	for cidx, gidx := range plan.GPUIndexes {
-		pod.Annotations[fmt.Sprintf(utils.AnnotationGPUContainerOn, strconv.Itoa(cidx))] = strconv.Itoa(gidx)
+		pod.Annotations[fmt.Sprintf(types.AnnotationGPUContainerOn, strconv.Itoa(cidx))] = strconv.Itoa(gidx)
 		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 			Name: strconv.Itoa(cidx),
 			Resources: v1.ResourceRequirements{
 				Limits: map[v1.ResourceName]resource.Quantity{
-					utils.ResourceGPUCore:   resource.MustParse(strconv.Itoa(plan.Demand[cidx].Core)),
-					utils.ResourceGPUMemory: resource.MustParse(strconv.Itoa(plan.Demand[cidx].Memory)),
+					types.ResourceGPUPercent: resource.MustParse(strconv.Itoa(plan.Demand[cidx].Percent)),
 				},
 			},
 		})
@@ -112,8 +112,7 @@ func MockPodWithDemand(demand Demand) *v1.Pod {
 		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 			Resources: v1.ResourceRequirements{
 				Limits: map[v1.ResourceName]resource.Quantity{
-					utils.ResourceGPUCore:   resource.MustParse(strconv.Itoa(gpu.Core)),
-					utils.ResourceGPUMemory: resource.MustParse(strconv.Itoa(gpu.Memory)),
+					types.ResourceGPUPercent: resource.MustParse(strconv.Itoa(gpu.Percent)),
 				},
 			},
 		})
@@ -123,8 +122,8 @@ func MockPodWithDemand(demand Demand) *v1.Pod {
 
 func TestNewDemandFromPod(t *testing.T) {
 	demandList := []Demand{
-		{{100, 12}, {100, 12}},
-		{{100, 12}, {50, 1}, {50, 1}},
+		{{100, 0}, {100, 0}},
+		{{100, 0}, {50, 0}, {50, 0}},
 		{},
 	}
 	for _, demand := range demandList {
@@ -136,15 +135,15 @@ func TestNewDemandFromPod(t *testing.T) {
 func TestNewPlanFromPod(t *testing.T) {
 	plans := []Plan{
 		{
-			Demand:     Demand{{100, 12}, {100, 12}},
+			Demand:     Demand{{100, 0}, {100, 0}},
 			GPUIndexes: []int{0, 1},
 			Score:      0,
 		}, {
-			Demand:     Demand{{50, 1}, {100, 12}},
+			Demand:     Demand{{50, 0}, {100, 0}},
 			GPUIndexes: []int{0, 0},
 			Score:      0,
 		}, {
-			Demand:     Demand{{100, 12}, {100, 12}},
+			Demand:     Demand{{100, 0}, {100, 0}},
 			GPUIndexes: []int{0, 0},
 			Score:      0,
 		},
@@ -159,38 +158,26 @@ func TestNewPlanFromPod(t *testing.T) {
 
 func TestChoose(t *testing.T) {
 	type ChooseCase struct {
-		GPUs GPUs
-		Demand Demand
+		GPUs    GPUs
+		Demand  Demand
 		Success bool
 	}
 	chooses := []ChooseCase{
 		{
-			GPUs:    []*GPUResource{{100, 15}, {100, 15}},
-			Demand:  []GPUResource{{50, 7}, {50, 7}},
+			GPUs:    []*GPUResource{{100, 0}, {100, 0}},
+			Demand:  []GPUResource{{50, 0}, {50, 0}},
 			Success: true,
 		}, {
-			GPUs:    []*GPUResource{{100, 15}},
-			Demand:  []GPUResource{{50, 7}, {50, 7}},
+			GPUs:    []*GPUResource{{100, 0}},
+			Demand:  []GPUResource{{50, 0}, {50, 0}},
 			Success: true,
 		}, {
-			GPUs:    []*GPUResource{{100, 15}},
-			Demand:  []GPUResource{{50, 7}, {50, 9}},
+			GPUs:    []*GPUResource{{100, 0}},
+			Demand:  []GPUResource{{50, 0}, {60, 0}},
 			Success: false,
 		}, {
-			GPUs:    []*GPUResource{{100, 15}},
-			Demand:  []GPUResource{{50, 7}, {50, 8}},
-			Success: true,
-		}, {
-			GPUs:    []*GPUResource{{100, 15}, {100, 15}},
-			Demand:  []GPUResource{{50, 7}, {50, 9}},
-			Success: true,
-		}, {
-			GPUs:    []*GPUResource{{100, 7}, {100, 7}},
-			Demand:  []GPUResource{{50, 7}, {50, 9}},
-			Success: false,
-		}, {
-			GPUs:    []*GPUResource{{10, 15}, {100, 15}},
-			Demand:  []GPUResource{{100, 7}, {10, 15}},
+			GPUs:    []*GPUResource{{100, 0}, {100, 0}},
+			Demand:  []GPUResource{{100, 0}, {10, 0}},
 			Success: true,
 		},
 	}

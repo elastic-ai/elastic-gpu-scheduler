@@ -26,18 +26,23 @@ type Dealer interface {
 	Bind(node string, pod *v1.Pod) error
 	Allocate(pod *v1.Pod) error
 	Release(pod *v1.Pod) error
+	Forget(pod *v1.Pod) error
 	KnownPod(pod *v1.Pod) bool
+	PodReleased(pod *v1.Pod) bool
+	PrintStatus(pod *v1.Pod, action string)
+	Status() (map[string]*NodeInfo, error)
 }
 
 func NewDealer(clientset *kubernetes.Clientset, nodeLister corelisters.NodeLister, podLister corelisters.PodLister, rater Rater) (Dealer, error) {
 	di := &DealerImpl{
-		client:     clientset,
-		nodeLister: nodeLister,
-		podLister:  podLister,
-		rater:      rater,
-		lock:       sync.Mutex{},
-		podMaps:    make(map[types.UID]*v1.Pod),
-		nodeMaps:   make(map[string]*NodeInfo),
+		client:         clientset,
+		nodeLister:     nodeLister,
+		podLister:      podLister,
+		rater:          rater,
+		lock:           sync.Mutex{},
+		podMaps:        make(map[types.UID]*v1.Pod),
+		nodeMaps:       make(map[string]*NodeInfo),
+		releasedPodMap: make(map[types.UID]struct{}),
 	}
 	pods, err := clientset.CoreV1().Pods(metav1.NamespaceAll).List(context.Background(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", schetypes.GPUAssume, "true"),
@@ -62,10 +67,11 @@ type DealerImpl struct {
 	nodeLister corelisters.NodeLister
 	podLister  corelisters.PodLister
 
-	rater    Rater
-	lock     sync.Mutex
-	podMaps  map[types.UID]*v1.Pod
-	nodeMaps map[string]*NodeInfo
+	rater          Rater
+	lock           sync.Mutex
+	podMaps        map[types.UID]*v1.Pod
+	nodeMaps       map[string]*NodeInfo
+	releasedPodMap map[types.UID]struct{}
 }
 
 func (d *DealerImpl) Assume(nodes []string, pod *v1.Pod) ([]bool, []error) {
@@ -81,7 +87,7 @@ func (d *DealerImpl) Assume(nodes []string, pod *v1.Pod) ([]bool, []error) {
 		if err != nil {
 			ni = nil
 			ans[i] = false
-			res[i] = fmt.Errorf("nano gpu scheduler get node failed: %s", err.Error())
+			res[i] = fmt.Errorf("nano gpu scheduler get node failed: %v", err)
 		}
 		nodeInfos[i] = ni
 	}
@@ -171,14 +177,14 @@ func (d *DealerImpl) Bind(node string, pod *v1.Pod) (err error) {
 		return err
 	}
 	d.podMaps[pod.UID] = newPod
-	d.status("bind")
+
 	return nil
 }
 
 func (d *DealerImpl) Allocate(pod *v1.Pod) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	if pod.Name == "" {
+	if pod.Spec.NodeName == "" {
 		return fmt.Errorf("pod %s/%s nodename is empty", pod.Namespace, pod.Name)
 	}
 	ni, err := d.getNodeInfo(pod.Spec.NodeName)
@@ -197,7 +203,6 @@ func (d *DealerImpl) Allocate(pod *v1.Pod) error {
 		return err
 	}
 	d.podMaps[pod.UID] = pod
-	d.status("allocate")
 	return nil
 }
 
@@ -224,7 +229,7 @@ func (d *DealerImpl) Release(pod *v1.Pod) error {
 		return err
 	}
 	delete(d.podMaps, pod.UID)
-	d.status("release")
+	d.releasedPodMap[pod.UID] = struct{}{}
 	return nil
 }
 
@@ -232,6 +237,13 @@ func (d *DealerImpl) KnownPod(pod *v1.Pod) bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	_, ok := d.podMaps[pod.UID]
+	return ok
+}
+
+func (d *DealerImpl) PodReleased(pod *v1.Pod) bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	_, ok := d.releasedPodMap[pod.UID]
 	return ok
 }
 
@@ -267,9 +279,24 @@ func (d *DealerImpl) getNodeInfo(name string) (*NodeInfo, error) {
 	return d.nodeMaps[name], nil
 }
 
-func (d *DealerImpl) status(action string) {
-	log.Infof("-----%s-status-----", action)
+func (d *DealerImpl) PrintStatus(pod *v1.Pod, action string) {
+	log.Infof("------resource status after %s for %s/%s------", action, pod.Namespace, pod.Name)
 	for name, node := range d.nodeMaps {
 		log.Infof("node %s: %v\n", name, node.GPUs)
 	}
+	log.Infof("------------")
+}
+
+func (d *DealerImpl) Forget(pod *v1.Pod) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	delete(d.releasedPodMap, pod.UID)
+	delete(d.podMaps, pod.UID)
+
+	return nil
+}
+
+func (d *DealerImpl) Status() (map[string]*NodeInfo, error) {
+	return d.nodeMaps, nil
 }

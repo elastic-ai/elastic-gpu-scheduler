@@ -3,7 +3,6 @@ module github.com/nano-gpu/nano-gpu-scheduler
 go 1.16
 
 require (
-	github.com/comail/colog v0.0.0-20160416085026-fba8e7b1f46c // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/stretchr/testify v1.4.0

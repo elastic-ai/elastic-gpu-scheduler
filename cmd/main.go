@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/controller"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/routes"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/scheduler"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/types"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils/signals"
 
 	"github.com/julienschmidt/httprouter"
@@ -51,7 +53,7 @@ func initKubeClient() {
 }
 
 func InitFlag() {
-	flag.StringVar(&PriorityAlgorithm, "priority", "binpack", "priority algorithm, binpack/spread/random")
+	flag.StringVar(&PriorityAlgorithm, "priority", "binpack", "priority algorithm, binpack/spread")
 }
 
 func main() {
@@ -61,6 +63,16 @@ func main() {
 	flag.Parse()
 
 	log.Info("Priority algorithm is ", PriorityAlgorithm)
+
+	switch PriorityAlgorithm {
+	case types.PrioritySpread:
+		controller.Rater = &dealer.Spread{}
+	case types.PriorityBinPack:
+		controller.Rater = &dealer.Binpack{}
+	default:
+		log.Errorf("Priority algorithm %s is not supported", PriorityAlgorithm)
+		return
+	}
 
 	threadness := StringToInt(os.Getenv("THREADNESS"))
 
@@ -95,15 +107,19 @@ func main() {
 	routes.AddPredicate(router, predicate)
 	routes.AddPrioritize(router, prioritize)
 	routes.AddBind(router, bind)
+	routes.AddStatus(router, schudulerController.GetDealer())
 
-	log.V(3).Infof("server starting on the port :%s", port)
+	log.Infof("server starting on the port :%s", port)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func StringToInt(sThread string) int {
-	thread := 1
+	thread, err := strconv.Atoi(sThread)
+	if err != nil || thread < 1 {
+		return 1
+	}
 
 	return thread
 }

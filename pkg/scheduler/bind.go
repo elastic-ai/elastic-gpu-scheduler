@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,8 +43,16 @@ func NewNanoGPUBind(ctx context.Context, clientset *kubernetes.Clientset, d deal
 				log.Warningf("warn: Failed to handle pod %s in ns %s due to error %v", name, namespace, err)
 				return err
 			}
+			if utils.IsCompletedPod(pod) {
+				err = fmt.Errorf("pod %s/%s already deleted or completed", name, namespace)
+				log.Warningf("warn: Failed to handle pod %s in ns %s due to error %v", name, namespace, err)
+				return err
+			}
 
-			return d.Bind(node, pod)
+			err = d.Bind(node, pod)
+			d.PrintStatus(pod, "bind")
+
+			return err
 		},
 		Dealer: d,
 	}
@@ -61,7 +70,7 @@ func getPod(ctx context.Context, name string, namespace string, podUID types.UID
 			return nil, err
 		}
 		if pod.UID != podUID {
-			return nil, fmt.Errorf("The pod %s in ns %s's uid is %v, and it's not equal with expected %v",
+			return nil, fmt.Errorf("pod %s in ns %s's uid is %v, and it's not equal with expected %v",
 				name,
 				namespace,
 				pod.UID,

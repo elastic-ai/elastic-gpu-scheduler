@@ -3,8 +3,8 @@ package dealer
 import (
 	"fmt"
 
-	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
 	schetypes "github.com/nano-gpu/nano-gpu-scheduler/pkg/types"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -26,13 +26,12 @@ type NodeInfo struct {
 func NewNodeInfo(name string, node *v1.Node, rater Rater) *NodeInfo {
 	var (
 		count     = utils.GetGPUDeviceCountOfNode(node)
-		memory    = utils.GetTotalGPUMemory(node) / count
 		resources = make(GPUs, count)
 	)
 	for i := 0; i < count; i++ {
 		resources[i] = &GPUResource{
-			Core:   schetypes.GPUCoreEachCard,
-			Memory: memory,
+			Percent:      schetypes.GPUPercentEachCard,
+			PercentTotal: schetypes.GPUPercentEachCard,
 		}
 	}
 	return &NodeInfo{
@@ -71,7 +70,7 @@ func (ni *NodeInfo) Bind(demands Demand) (*Plan, error) {
 	key := demands.Hash()
 	_, ok := ni.PlanCache[key]
 	if !ok {
-		if assumed, _ := ni.Assume(demands); !assumed{
+		if assumed, _ := ni.Assume(demands); !assumed {
 			return nil, fmt.Errorf("assume %s on %s failed", demands, ni.GPUs)
 		}
 	}

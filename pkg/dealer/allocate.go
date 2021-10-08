@@ -5,9 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
+)
+
+const (
+	NotNeedGPU = -1
 )
 
 // GPUResource ─┬─> GPUs
@@ -30,8 +35,7 @@ func NewPlanFromPod(pod *v1.Pod) (*Plan, error) {
 	}
 	for i, c := range pod.Spec.Containers {
 		plan.Demand[i] = GPUResource{
-			Core:   utils.GetGPUCoreFromContainer(&c),
-			Memory: utils.GetGPUMemoryFromContainer(&c),
+			Percent: utils.GetGPUPercentFromContainer(&c),
 		}
 		idx, err := utils.GetContainerAssignIndex(pod, c.Name)
 		if err != nil {
@@ -49,8 +53,7 @@ func NewDemandFromPod(pod *v1.Pod) Demand {
 	ans := make(Demand, len(pod.Spec.Containers))
 	for i, container := range pod.Spec.Containers {
 		ans[i] = GPUResource{
-			Core:   utils.GetGPUCoreFromContainer(&container),
-			Memory: utils.GetGPUMemoryFromContainer(&container),
+			Percent: utils.GetGPUPercentFromContainer(&container),
 		}
 	}
 	return ans
@@ -89,6 +92,12 @@ func (g GPUs) Choose(demand Demand, rater Rater) (ans *Plan, err error) {
 			ans = curr
 			return
 		}
+
+		if demand[position].Percent == 0 {
+			indexes[position] = NotNeedGPU
+			dfs(position + 1)
+			return
+		}
 		for i, gpu := range g {
 			if !gpu.CanAllocate(demand[position]) {
 				continue
@@ -109,6 +118,10 @@ func (g GPUs) Choose(demand Demand, rater Rater) (ans *Plan, err error) {
 func (g GPUs) Allocate(plan *Plan) error {
 	for i := 0; i < len(plan.GPUIndexes); i++ {
 		if !g[plan.GPUIndexes[i]].CanAllocate(plan.Demand[i]) {
+			// restore
+			for j := 0; j < i; j++ {
+				g[plan.GPUIndexes[j]].Add(plan.Demand[i])
+			}
 			return fmt.Errorf("can't apply plan %v on %s", plan, g)
 		}
 		g[plan.GPUIndexes[i]].Sub(plan.Demand[i])
@@ -135,24 +148,50 @@ func (g GPUs) String() string {
 }
 
 type GPUResource struct {
-	Core   int
-	Memory int
+	Percent      int
+	PercentTotal int
 }
 
 func (g GPUResource) String() string {
-	return fmt.Sprintf("(%d, %d)", g.Core, g.Memory)
+	return fmt.Sprintf("(%d)", g.Percent)
 }
 
 func (g *GPUResource) Add(resource GPUResource) {
-	g.Memory += resource.Memory
-	g.Core += resource.Core
+	g.Percent += resource.Percent
 }
 
 func (g *GPUResource) Sub(resource GPUResource) {
-	g.Memory -= resource.Memory
-	g.Core -= resource.Core
+	g.Percent -= resource.Percent
 }
 
 func (g *GPUResource) CanAllocate(resource GPUResource) bool {
-	return g.Core >= resource.Core && g.Memory >= resource.Memory
+	return g.Percent >= resource.Percent
+}
+
+// return gpu usage of current node, [0%, 100%]
+func (gpus GPUs) Usage() float64 {
+	percentSum, percentUsed := 0, 0
+	for _, r := range gpus {
+		percentSum += r.PercentTotal
+		percentUsed += r.PercentTotal - r.Percent
+	}
+	return float64(percentUsed) / float64(percentSum)
+}
+
+func (gpus GPUs) PercentUsed() int {
+	sumPercentUsed := 0
+	for _, r := range gpus {
+		sumPercentUsed += r.PercentTotal - r.Percent
+	}
+	return sumPercentUsed
+}
+
+func (gpus GPUs) UsageVariance() float64 {
+	var (
+		percentUsages = []float64{}
+	)
+	for _, r := range gpus {
+		percentUsages = append(percentUsages, (float64(r.PercentTotal)-float64(r.Percent))/float64(r.PercentTotal))
+	}
+	return Variance(percentUsages)
 }

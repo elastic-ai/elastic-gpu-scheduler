@@ -32,6 +32,13 @@ rules:
   - apiGroups:
       - ""
     resources:
+      - bindings
+      - pods/binding
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
       - nodes/status
     verbs:
       - patch
