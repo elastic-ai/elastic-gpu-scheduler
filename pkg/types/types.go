@@ -1,23 +1,21 @@
 package types
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 const (
-	NodeNameField                     = "spec.nodeName"
-	ResourceGPUMemory v1.ResourceName = "nano-gpu.io/gpu-memory"
-	ResourceGPUCore   v1.ResourceName = "nano-gpu.io/gpu-core"
-	GPUCoreEachCard                   = 100
+	NodeNameField                      = "spec.nodeName"
+	ResourceGPUPercent v1.ResourceName = "nano-gpu/gpu-percent"
+	GPUPercentEachCard                 = 100
 
-	GPUAssume                = "nano-gpu.io/gpu"
+	GPUAssume                = "nano-gpu/assume"
 	AnnotationGPUAssume      = GPUAssume
 	LabelGPUAssume           = GPUAssume
-	AnnotationGPUContainerOn = "nano-gpu.io/gpu-%s"
+	AnnotationGPUContainerOn = "nano-gpu/container-%s"
 )
 
 const (
 	PriorityBinPack string = "binpack"
 	PrioritySpread  string = "spread"
-	PriorityRandom  string = "random"
 )

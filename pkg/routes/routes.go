@@ -9,6 +9,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/scheduler"
 
 	log "k8s.io/klog/v2"
@@ -21,6 +22,8 @@ const (
 	bindPrefix       = apiPrefix + "/bind"
 	predicatesPrefix = apiPrefix + "/filter"
 	prioritiesPrefix = apiPrefix + "/priorities"
+
+	statusPrefix = "/status"
 )
 
 var (
@@ -56,8 +59,17 @@ func PredicateRoute(predicate *scheduler.Predicate) httprouter.Handle {
 				Error:       err.Error(),
 			}
 		} else {
-			log.V(5).Info("GpuSharingFilter ExtenderArgs =", extenderArgs)
-			extenderFilterResult = predicate.Handler(extenderArgs)
+			log.V(5).Infof("GpuSharingFilter ExtenderArgs: %v", extenderArgs)
+			if extenderArgs.NodeNames == nil {
+				extenderFilterResult = &extender.ExtenderFilterResult{
+					Nodes:       nil,
+					FailedNodes: nil,
+					Error:       "nano-gpu-scheduler extender must be configured with nodeCacheCapable=true",
+				}
+			} else {
+				log.Infof("start filter for pod %s/%s", extenderArgs.Pod.Namespace, extenderArgs.Pod.Name)
+				extenderFilterResult = predicate.Handler(extenderArgs)
+			}
 		}
 
 		if resultBody, err := json.Marshal(extenderFilterResult); err != nil {
@@ -82,7 +94,7 @@ func PrioritizeRoute(prioritize *scheduler.Prioritize) httprouter.Handle {
 
 		var buf bytes.Buffer
 		body := io.TeeReader(r.Body, &buf)
-		log.V(5).Info(prioritize.Name, " ExtenderArgs = ", buf.String())
+		log.V(2).Info(prioritize.Name, " ExtenderArgs = ", buf.String())
 
 		var extenderArgs extender.ExtenderArgs
 		var hostPriorityList *extender.HostPriorityList
@@ -91,6 +103,7 @@ func PrioritizeRoute(prioritize *scheduler.Prioritize) httprouter.Handle {
 			panic(err)
 		}
 
+		log.Infof("start score for pod %s/%s", extenderArgs.Pod.Namespace, extenderArgs.Pod.Name)
 		if list, err := prioritize.Handler(extenderArgs); err != nil {
 			panic(err)
 		} else {
@@ -120,14 +133,14 @@ func BindRoute(bind *scheduler.Bind) httprouter.Handle {
 		var extenderBindingArgs extender.ExtenderBindingArgs
 		var extenderBindingResult *extender.ExtenderBindingResult
 		failed := false
-
 		if err := json.NewDecoder(body).Decode(&extenderBindingArgs); err != nil {
 			extenderBindingResult = &extender.ExtenderBindingResult{
 				Error: err.Error(),
 			}
 			failed = true
 		} else {
-			log.V(5).Info("GpuSharingBind ExtenderArgs =", extenderBindingArgs)
+			log.Infof("start bind pod %s/%s to node %s", extenderBindingArgs.PodNamespace, extenderBindingArgs.PodName, extenderBindingArgs.Node)
+			log.V(2).Info("GpuSharingBind ExtenderArgs =", extenderBindingArgs)
 			extenderBindingResult = bind.Handler(extenderBindingArgs)
 		}
 
@@ -166,9 +179,9 @@ func AddVersion(router *httprouter.Router) {
 
 func DebugLogging(h httprouter.Handle, path string) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-		log.V(5).Info(path, " request body = ", r.Body)
+		log.V(4).Info(path, " request body = ", r.Body)
 		h(w, r, p)
-		log.V(5).Info(path, " response=", w)
+		log.V(4).Info(path, " response=", w)
 	}
 }
 
@@ -185,5 +198,43 @@ func AddBind(router *httprouter.Router, bind *scheduler.Bind) {
 		log.Warning("AddBind was called more then once!")
 	} else {
 		router.POST(bindPrefix, DebugLogging(BindRoute(bind), bindPrefix))
+	}
+}
+
+func AddStatus(router *httprouter.Router, d dealer.Dealer) {
+	if handle, _, _ := router.Lookup("GET", statusPrefix); handle != nil {
+		log.Warning("AddBind was called more then once!")
+	} else {
+		router.POST(statusPrefix, DebugLogging(StatusRoute(d), statusPrefix))
+	}
+}
+
+func StatusRoute(d dealer.Dealer) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		nodeMaps, err := d.Status()
+		w.Header().Set("Content-Type", "application/json")
+		if err != nil {
+			log.Warningf("failed to get status: %v", err)
+
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
+			w.Write([]byte(errMsg))
+			return
+		}
+
+		if resultBody, err := json.Marshal(nodeMaps); err != nil {
+			log.Warningf("failed due to ", err)
+			// panic(err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
+			w.Write([]byte(errMsg))
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			w.Write(resultBody)
+		}
+
 	}
 }

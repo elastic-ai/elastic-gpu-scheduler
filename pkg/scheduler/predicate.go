@@ -2,17 +2,18 @@ package scheduler
 
 import (
 	"context"
+
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	log "k8s.io/klog/v2"
 	extender "k8s.io/kube-scheduler/extender/v1"
 )
 
 type Predicate struct {
-	Name  string
-	Func  func(pod *v1.Pod, nodeNames []string, d dealer.Dealer) ([]bool, []error)
+	Name   string
+	Func   func(pod *v1.Pod, nodeNames []string, d dealer.Dealer) ([]bool, []error)
 	Dealer dealer.Dealer
 }
 
@@ -44,7 +45,7 @@ func NewNanoGPUPredicate(ctx context.Context, clientset *kubernetes.Clientset, d
 	return &Predicate{
 		Name: "NanoGPUFilter",
 		Func: func(pod *v1.Pod, nodeNames []string, d dealer.Dealer) ([]bool, []error) {
-			log.Infof("Check if the pod name %s can be scheduled on nodes %v", pod.Name, nodeNames)
+			log.Infof("Check if the pod %s/%s can be scheduled on nodes %v", pod.Namespace, pod.Name, nodeNames)
 			return d.Assume(nodeNames, pod)
 		},
 		Dealer: d,

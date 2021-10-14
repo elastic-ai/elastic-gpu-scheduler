@@ -11,8 +11,8 @@ import (
 	log "k8s.io/klog/v2"
 )
 
-// IsCompletePod determines if the pod is complete
-func IsCompletePod(pod *v1.Pod) bool {
+// IsCompletedPod determines if the pod is complete
+func IsCompletedPod(pod *v1.Pod) bool {
 	if pod.DeletionTimestamp != nil {
 		return true
 	}
@@ -25,7 +25,7 @@ func IsCompletePod(pod *v1.Pod) bool {
 
 // IsGPUSharingPod determines if it's the pod for GPU sharing
 func IsGPUSharingPod(pod *v1.Pod) bool {
-	return GetGPUCoreFromPodResource(pod) > 0
+	return GetGPUPercentFromPodResource(pod) > 0
 }
 
 // GetGPUIDFromAnnotation gets GPU ID from Annotation
@@ -47,24 +47,14 @@ func GetGPUIDFromAnnotation(pod *v1.Pod) (gpuIDs []int) {
 	return gpuIDs
 }
 
-func GetGPUCoreFromPodResource(pod *v1.Pod) (gpuCore uint) {
+func GetGPUPercentFromPodResource(pod *v1.Pod) (gpuPercent uint) {
 	containers := pod.Spec.Containers
 	for _, container := range containers {
-		if val, ok := container.Resources.Limits[types.ResourceGPUCore]; ok {
-			gpuCore += uint(val.Value())
+		if val, ok := container.Resources.Limits[types.ResourceGPUPercent]; ok {
+			gpuPercent += uint(val.Value())
 		}
 	}
-	return gpuCore
-}
-
-func GetGPUMemoryFromPodResource(pod *v1.Pod) (gpuMemory uint) {
-	containers := pod.Spec.Containers
-	for _, container := range containers {
-		if val, ok := container.Resources.Limits[types.ResourceGPUMemory]; ok {
-			gpuMemory += uint(val.Value())
-		}
-	}
-	return gpuMemory
+	return gpuPercent
 }
 
 func arrayToString(array []int, delim string) string {
@@ -101,16 +91,8 @@ func GetContainerAssignIndex(pod *v1.Pod, containerName string) (int, error) {
 	return strconv.Atoi(val)
 }
 
-func GetGPUCoreFromContainer(container *v1.Container) int {
-	val, ok := container.Resources.Limits[types.ResourceGPUCore]
-	if !ok {
-		return 0
-	}
-	return int(val.Value())
-}
-
-func GetGPUMemoryFromContainer(container *v1.Container) int {
-	val, ok := container.Resources.Limits[types.ResourceGPUMemory]
+func GetGPUPercentFromContainer(container *v1.Container) int {
+	val, ok := container.Resources.Limits[types.ResourceGPUPercent]
 	if !ok {
 		return 0
 	}

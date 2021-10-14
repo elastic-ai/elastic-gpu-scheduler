@@ -15,16 +15,15 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
-      hostNetwork: true
       serviceAccount: nano-gpu
       containers:
         - name: nano-gpu-scheduler
           image: nano-gpu-scheduler
-          command: ["/usr/bin/nano-gpu-scheduler", "nano-gpu-scheduler"]
-          args: ["-priority", "binpack"]
+          command: ["/usr/bin/nano-gpu-scheduler"]
+          args: ["--priority", "binpack", "--v", "2"]
           env:
             - name: PORT
-              value: "12345"
+              value: "39999"
 ---
 apiVersion: v1
 kind: Service
@@ -35,8 +34,7 @@ metadata:
     app: nano-gpu-scheduler
 spec:
   ports:
-    - port: 12345
-      name: http
-      targetPort: 12345
+    - port: 39999
+      targetPort: 39999
   selector:
     app: nano-gpu-scheduler

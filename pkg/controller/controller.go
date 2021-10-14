@@ -2,12 +2,13 @@ package controller
 
 import (
 	"fmt"
-	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 	"time"
+
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -25,6 +26,8 @@ import (
 var (
 	KeyFunc = clientgocache.DeletionHandlingMetaNamespaceKeyFunc
 )
+
+var Rater dealer.Rater
 
 type Controller struct {
 	clientset *kubernetes.Clientset
@@ -53,22 +56,18 @@ type Controller struct {
 	nodeInformerSynced clientgocache.InformerSynced
 
 	dealer dealer.Dealer
-
-	// The cache to store the pod to be removed
-	removePodCache map[string]*v1.Pod
 }
 
 func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informers.SharedInformerFactory, stopCh <-chan struct{}) (c *Controller, err error) {
 	log.Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientset.CoreV1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "gpushare-schd-extender"})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "nano-gpu-scheduler"})
 
 	c = &Controller{
-		clientset:      clientset,
-		podQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "podQueue"),
-		recorder:       recorder,
-		removePodCache: map[string]*v1.Pod{},
+		clientset: clientset,
+		podQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "podQueue"),
+		recorder:  recorder,
 	}
 	// Create pod informer.
 	podInformer := kubeInformerFactory.Core().V1().Pods()
@@ -79,7 +78,7 @@ func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informer
 				return utils.IsGPUSharingPod(t)
 			case clientgocache.DeletedFinalStateUnknown:
 				if pod, ok := t.Obj.(*v1.Pod); ok {
-					log.Infof("delete pod %s in ns %s", pod.Name, pod.Namespace)
+					log.Infof("delete pod %s/%s", pod.Namespace, pod.Name)
 					return utils.IsGPUSharingPod(pod)
 				}
 				runtime.HandleError(fmt.Errorf("unable to convert object %T to *v1.Pod in %T", obj, c))
@@ -108,7 +107,7 @@ func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informer
 	go kubeInformerFactory.Start(stopCh)
 
 	// Create scheduler Cache
-	c.dealer, err = dealer.NewDealer(c.clientset, c.nodeLister, c.podLister, &dealer.SampleRater{})
+	c.dealer, err = dealer.NewDealer(c.clientset, c.nodeLister, c.podLister, Rater)
 	if err != nil {
 		log.Error("create dealer failed: %s", err.Error())
 		return nil, err
@@ -132,7 +131,6 @@ func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informer
 
 	return c, nil
 }
-
 
 func (c *Controller) GetDealer() dealer.Dealer {
 	return c.dealer
@@ -170,8 +168,8 @@ func (c *Controller) runWorker() {
 // meaning it did not expect to see any more of its pods created or deleted. This function is not meant to be
 // invoked concurrently with the same key.
 func (c *Controller) syncPod(key string) (forget bool, err error) {
+	log.V(2).Infof("begin to sync controller for pod %s", key)
 	ns, name, err := clientgocache.SplitMetaNamespaceKey(key)
-	log.V(5).Info("begin to sync controller pod %s in ns %s", name, ns)
 	if err != nil {
 		return false, err
 	}
@@ -179,24 +177,22 @@ func (c *Controller) syncPod(key string) (forget bool, err error) {
 	pod, err := c.podLister.Pods(ns).Get(name)
 	switch {
 	case errors.IsNotFound(err):
-		log.V(5).Infof("pod %s in ns %s has been deleted.", name, ns)
-		pod, found := c.removePodCache[key]
-		if found {
-			if err := c.dealer.Release(pod); err != nil {
-				log.Errorf("release pod %s/%s failed: %s", pod.Namespace, pod.Name, err.Error())
-			}
-			delete(c.removePodCache, key)
-		}
+		log.V(2).Infof("pod %s/%s has been deleted.", ns, name)
 	case err != nil:
 		log.Warningf("unable to retrieve pod %v from the store: %v", key, err)
 	default:
-		if utils.IsCompletePod(pod) {
-			log.V(5).Infof("pod %s in ns %s has completed.", name, ns)
+		if utils.IsCompletedPod(pod) {
+			log.V(2).Infof("pod %s/%s has completed.", ns, name)
 			if err := c.dealer.Release(pod); err != nil {
 				log.Errorf("release pod %s/%s failed: %s", pod.Namespace, pod.Name, err.Error())
 			}
+			c.dealer.PrintStatus(pod, "release")
 		} else {
+			if pod.Spec.NodeName == "" {
+				return true, nil
+			}
 			err := c.dealer.Allocate(pod)
+			c.dealer.PrintStatus(pod, "allocate")
 			if err != nil {
 				return false, err
 			}
@@ -209,13 +205,13 @@ func (c *Controller) syncPod(key string) (forget bool, err error) {
 // processNextWorkItem will read a single work item off the podQueue and
 // attempt to process it.
 func (c *Controller) processNextWorkItem() bool {
-	log.V(5).Info("begin processNextWorkItem()")
+	log.V(4).Info("begin processNextWorkItem()")
 	key, quit := c.podQueue.Get()
 	if quit {
 		return false
 	}
 	defer c.podQueue.Done(key)
-	defer log.V(5).Info("end processNextWorkItem()")
+	defer log.V(4).Info("end processNextWorkItem()")
 	forget, err := c.syncPod(key.(string))
 	if err == nil {
 		if forget {
@@ -264,11 +260,11 @@ func (c *Controller) updatePodInCache(oldObj, newObj interface{}) {
 	needUpdate := false
 
 	// 1. Need update when pod is turned to complete or failed
-	if c.dealer.KnownPod(oldPod) && utils.IsCompletePod(newPod) {
+	if c.dealer.KnownPod(oldPod) && utils.IsCompletedPod(newPod) {
 		needUpdate = true
 	}
-	// 2. Need update when it's unknown pod, and GPU annotation has been set
-	if !c.dealer.KnownPod(oldPod) && utils.IsAssumed(newPod) {
+	// 2. Need update when it's unknown and unreleased pod, and GPU annotation has been set
+	if !c.dealer.KnownPod(oldPod) && !c.dealer.PodReleased(oldPod) && utils.IsAssumed(newPod) {
 		needUpdate = true
 	}
 	if needUpdate {
@@ -277,18 +273,18 @@ func (c *Controller) updatePodInCache(oldObj, newObj interface{}) {
 			log.Warningf("Failed to get the job key: %v", err)
 			return
 		}
-		log.V(5).Infof("Need to update pod name %s in ns %s and old status is %v, new status is %v; its old annotation %v and new annotation %v",
-			newPod.Name,
+		log.V(2).Infof("Need to update pod name %s/%s and old status is %v, new status is %v; its old annotation %v and new annotation %v",
 			newPod.Namespace,
+			newPod.Name,
 			oldPod.Status.Phase,
 			newPod.Status.Phase,
 			oldPod.Annotations,
 			newPod.Annotations)
 		c.podQueue.Add(podKey)
 	} else {
-		log.V(5).Infof("No need to update pod name %s in ns %s and old status is %v, new status is %v; its old annotation %v and new annotation %v",
-			newPod.Name,
+		log.V(4).Infof("No need to update pod name %s/%s and old status is %v, new status is %v; its old annotation %v and new annotation %v",
 			newPod.Namespace,
+			newPod.Name,
 			oldPod.Status.Phase,
 			newPod.Status.Phase,
 			oldPod.Annotations,
@@ -315,12 +311,7 @@ func (c *Controller) deletePodFromCache(obj interface{}) {
 		return
 	}
 
-	log.Infof("delete pod %s in ns %s", pod.Name, pod.Namespace)
-	podKey, err := KeyFunc(pod)
-	if err != nil {
-		log.Warning("Failed to get the jobkey: %v", err)
-		return
-	}
-	c.podQueue.Add(podKey)
-	c.removePodCache[podKey] = pod
+	log.Infof("delete pod %s/%s", pod.Namespace, pod.Name)
+
+	c.dealer.Forget(pod)
 }
