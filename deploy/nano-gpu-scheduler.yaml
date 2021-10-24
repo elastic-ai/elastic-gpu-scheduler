@@ -18,7 +18,7 @@ spec:
       serviceAccount: nano-gpu
       containers:
         - name: nano-gpu-scheduler
-          image: nano-gpu-scheduler
+          image: nano-gpu/nano-gpu-scheduler
           command: ["/usr/bin/nano-gpu-scheduler"]
           args: ["--priority", "binpack", "--v", "2"]
           env:

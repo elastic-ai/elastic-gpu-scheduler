@@ -11,7 +11,7 @@ You may also be interested in *Nano GPU Agent* which is a Kubernetes device plug
 ## Motivation
 In the GPU container field, GPU providers such as nvidia have introduced a docker-based gpu containerization project that allows users to use GPU cards in Kubernetes Pods via the Kubernetes extended resource with the nvidia k8s device plugin. However, this project focuses more on how containers use GPU cards on Kubernetes nodes, and not on GPU resource scheduling.
 
-Nano GPU scheduler is based on Kubernetes extended scheduler, which can schedule gpu cores and memories, share gpu with multiple containers and even spread containers of pod to different gpus. The scheduling algorithm supports binpack, spread, random and other policies. In addition, through the supporting nano gpu agent, it can be adapted to nvidia docker, gpushare, qgpu and other gpu container solutions. Nano GPU scheduler mainly satisfies the GPU resources scheduling and allocation requirements in Kubernetes.
+Nano GPU scheduler is based on Kubernetes extended scheduler, which can schedule gpu cores, memories, percents, share gpu with multiple containers and even spread containers of pod to different GPUs. The scheduling algorithm supports binpack, spread, random and other policies. In addition, through the supporting nano gpu agent, it can be adapted to nvidia docker, gpushare, qgpu and other gpu container solutions. Nano GPU scheduler mainly satisfies the GPU resources scheduling and allocation requirements in Kubernetes.
 
 ## Architecture
 ![](static/nano-gpu-scheduler-arch.png)
@@ -43,17 +43,12 @@ Add the following configuration to `extender` in `/etc/kubernetes/scheduler-poli
   "filterVerb": "filter",
   "prioritizeVerb": "priorities",
   "bindVerb": "bind",
-  "weight": 10,
+  "weight": 1,
   "enableHttps": false,
   "nodeCacheCapable": true,
   "managedResources": [
     {
-      "name": "nano-gpu.io/gpu-core",
-      "ignoredByScheduler": false
-    },
-    {
-      "name": "nano-gpu.io/gpu-memory",
-      "ignoredByScheduler": false
+      "name": "nano-gpu/gpu-percent"
     }
   ]
 }
@@ -84,12 +79,8 @@ spec:
           image: nvidia/cuda:10.0-base
           command: [ "sleep", "100000" ]
           resources:
-            requests:
-              nano-gpu.io/gpu-core: "20"
-              nano-gpu.io/gpu-memory: "1"
             limits:
-              nano-gpu.io/gpu-core: "20"
-              nano-gpu.io/gpu-memory: "1"
+              nano-gpu.io/gpu-percent: "20" // 20% GPU
 
 ```
 
@@ -106,7 +97,3 @@ spec:
 ## License
 Distributed under the Apache License.
 
-<!-- CONTACT -->
-## Contact
-- @xiaoxubeii xiaoxubeii@gmail.com
-- @payall4u payall4u@qq.com

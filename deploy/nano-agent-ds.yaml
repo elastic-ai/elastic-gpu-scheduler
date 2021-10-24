@@ -14,12 +14,19 @@ spec:
       labels:
         app: nano-gpu-agent
     spec:
-      serviceAccount: nano-gpu
+      serviceAccount: nano-gpu-agent
       hostNetwork: true
-      nodeSelector:
-        nvidia-device-enable: "enable"
+      initContainers:
+        - name: nano-gpu-installer
+          image: nano-gpu/nano-gpu-agent
+          command: [ "/usr/bin/install.sh" ]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
       containers:
-        - image: nano-gpu-agent
+        - image: nano-gpu/nano-gpu-agent
           command: ["/usr/bin/nano-gpu-agent", "--nodename=$(NODE_NAME)", "--dbfile=/host/var/lib/nanogpu/meta.db"]
           name: nano-gpu-agent
           resources:
