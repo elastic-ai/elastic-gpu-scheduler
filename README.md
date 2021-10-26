@@ -22,24 +22,27 @@ Nano GPU scheduler is based on Kubernetes extended scheduler, which can schedule
 - [NVIDIA drivers](https://github.com/NVIDIA/nvidia-docker/wiki/Frequently-Asked-Questions#how-do-i-install-the-nvidia-driver) 
 - [nvidia-docker](https://github.com/NVIDIA/nvidia-docker) 
   
+## Build Image
+
+Run `make` or `TAG=<image-tag> make` to build nano-gpu-scheduler image
+
 ## Getting Started
-1. Create RBAC
+1.  Deploy Nano GPU Agent
 ```
-$ kubectl apply -f deploy/nano-gpu-rbac.yaml
+$ kubectl apply -f https://raw.githubusercontent.com/nano-gpu/nano-gpu-agent/master/deploy/nano-gpu-agent.yaml
 ```
-2. Deploy Nano GPU Agent
+For more information , please refer to [Nano GPU Agent](https://github.com/nano-gpu/nano-gpu-agent).
+
+2. Deploy Nano GPU Scheduler
 ```
-$ kubectl apply -f deploy/nano-gpu-agent-ds.yaml
+$ kubectl apply -f deploy/nano-gpu-scheduler.yaml
 ```
-3. Deploy Nano GPU Scheduler
-```
-$ kubectl apply -f deploy/nano-gpu-scheduler-deploy.yaml
-```
-4. Enable Kubernetes scheduler extender
-Add the following configuration to `extender` in `/etc/kubernetes/scheduler-policy-config.json`:
+
+3. Enable Kubernetes scheduler extender
+Add the following configuration to `extenders` section in the `--policy-config-file` file:
 ```
 {
-  "urlPrefix": "http://<kube-apiserver-svc>/api/v1/namespaces/kube-system/services/<nano-gpu-scheduler-svc>/proxy/scheduler",
+  "urlPrefix": "http://<kube-apiserver-svc>/api/v1/namespaces/kube-system/services/nano-gpu-scheduler/proxy/scheduler",
   "filterVerb": "filter",
   "prioritizeVerb": "priorities",
   "bindVerb": "bind",
@@ -56,16 +59,17 @@ Add the following configuration to `extender` in `/etc/kubernetes/scheduler-poli
 
 You can set a scheduling policy by running `kube-scheduler --policy-config-file <filename>` or `kube-scheduler --policy-configmap <ConfigMap>`. Here is a [scheduler policy config sample](https://github.com/kubernetes/examples/blob/master/staging/scheduler-policy/scheduler-policy-config.json).
 
-5. Create GPU pod
+4. Create GPU pod
 ```
+cat <<EOF  | kubectl create -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cuda-10c
+  name: cuda-gpu-test
   labels:
     app: gpu-test
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: gpu-test
@@ -80,8 +84,8 @@ spec:
           command: [ "sleep", "100000" ]
           resources:
             limits:
-              nano-gpu.io/gpu-percent: "20" // 20% GPU
-
+              nano-gpu/gpu-percent: "20" 
+EOF
 ```
 
 <!-- ROADMAP -->
