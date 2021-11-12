@@ -117,6 +117,10 @@ func (g GPUs) Choose(demand Demand, rater Rater) (ans *Plan, err error) {
 
 func (g GPUs) Allocate(plan *Plan) error {
 	for i := 0; i < len(plan.GPUIndexes); i++ {
+		// no gpu needed
+		if plan.GPUIndexes[i] < 0 {
+			continue
+		}
 		if !g[plan.GPUIndexes[i]].CanAllocate(plan.Demand[i]) {
 			// restore
 			for j := 0; j < i; j++ {
@@ -131,6 +135,9 @@ func (g GPUs) Allocate(plan *Plan) error {
 
 func (g GPUs) Release(plan *Plan) error {
 	for i := 0; i < len(plan.Demand); i++ {
+		if plan.GPUIndexes[i] < 0 {
+			continue
+		}
 		if plan.GPUIndexes[i] >= len(g) {
 			return fmt.Errorf("allocate plan's GPU index %d bigger then GPU resource", plan.GPUIndexes[i])
 		}
