@@ -2,6 +2,7 @@ package dealer
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -186,4 +187,44 @@ func TestChoose(t *testing.T) {
 		_, err := choose.GPUs.Choose(choose.Demand, rater)
 		assert.Equal(t, choose.Success, err == nil)
 	}
+}
+
+func TestToSortableGPUs(t *testing.T) {
+	gpus := GPUs{
+		&GPUResource{80, 100},
+		&GPUResource{100, 100},
+		&GPUResource{30, 100},
+		&GPUResource{50, 100},
+	}
+
+	expected := SortableGPUs{
+		&GPUResourceWithIndex{&GPUResource{80, 100}, 0},
+		&GPUResourceWithIndex{&GPUResource{100, 100}, 1},
+		&GPUResourceWithIndex{&GPUResource{30, 100}, 2},
+		&GPUResourceWithIndex{&GPUResource{50, 100}, 3},
+	}
+
+	sortableGpus := gpus.ToSortableGPUs()
+
+	assert.Equal(t, len(sortableGpus), len(gpus))
+	assert.Equal(t, expected, sortableGpus)
+}
+
+func TestSortableGPUs(t *testing.T) {
+	gpus := SortableGPUs{
+		&GPUResourceWithIndex{&GPUResource{80, 100}, 0},
+		&GPUResourceWithIndex{&GPUResource{100, 100}, 1},
+		&GPUResourceWithIndex{&GPUResource{30, 100}, 2},
+		&GPUResourceWithIndex{&GPUResource{50, 100}, 3},
+	}
+	expected := SortableGPUs{
+		&GPUResourceWithIndex{&GPUResource{30, 100}, 2},
+		&GPUResourceWithIndex{&GPUResource{50, 100}, 3},
+		&GPUResourceWithIndex{&GPUResource{80, 100}, 0},
+		&GPUResourceWithIndex{&GPUResource{100, 100}, 1},
+	}
+
+	sort.Sort(gpus)
+
+	assert.Equal(t, expected, gpus)
 }

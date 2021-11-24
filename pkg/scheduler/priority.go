@@ -7,6 +7,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	log "k8s.io/klog/v2"
 	extender "k8s.io/kube-scheduler/extender/v1"
 )
 
@@ -34,6 +35,7 @@ func NewNanoGPUPrioritize(ctx context.Context, clientset *kubernetes.Clientset, 
 					Score: int64(score),
 				}
 			}
+			log.Infof("node scores: %v", priorityList)
 			return &priorityList, nil
 		},
 	}

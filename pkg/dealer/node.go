@@ -44,9 +44,11 @@ func NewNodeInfo(name string, node *v1.Node, rater Rater) *NodeInfo {
 
 func (ni *NodeInfo) Assume(demand Demand) (bool, error) {
 	key := demand.Hash()
+
 	if _, ok := ni.PlanCache[key]; ok {
 		return true, nil
 	}
+
 	plan, err := ni.GPUs.Choose(demand, ni.Rater)
 	if err != nil {
 		return false, err
