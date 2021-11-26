@@ -108,6 +108,7 @@ func (d *DealerImpl) Assume(nodes []string, pod *v1.Pod) ([]bool, []error) {
 					if nodeInfos[number] == nil {
 						continue
 					}
+					nodeInfos[number].cleanPlan()
 					assumed, err := nodeInfos[number].Assume(demand)
 					ans[number] = assumed
 					res[number] = err

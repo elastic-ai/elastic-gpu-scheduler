@@ -72,46 +72,28 @@ func (d *Demand) Hash() string {
 	return hex.EncodeToString(to(sha256.Sum256([]byte(d.String()))))[0:8]
 }
 
+func (d *Demand) ToSortableGPUs() SortableGPUs {
+	sortableGpus := make(SortableGPUs, 0)
+	for i, gpu := range *d {
+		sortableGpu := &GPUResourceWithIndex{
+			GPUResource: &GPUResource{gpu.Percent, gpu.PercentTotal},
+			index:       i,
+		}
+		sortableGpus = append(sortableGpus, sortableGpu)
+	}
+
+	return sortableGpus
+}
+
 type GPUs []*GPUResource
 
 func (g GPUs) Choose(demand Demand, rater Rater) (ans *Plan, err error) {
-	var (
-		dfs     func(i int)
-		indexes = make([]int, len(demand))
-	)
-	dfs = func(position int) {
-		if position == len(demand) {
-			curr := &Plan{
-				Demand:     demand,
-				GPUIndexes: utils.CloneInts(indexes),
-			}
-			curr.Score = rater.Rate(g, curr)
-			if ans != nil && ans.Score > curr.Score {
-				return
-			}
-			ans = curr
-			return
-		}
+	ans = &Plan{
+		Demand: demand,
+	}
+	ans.Score = rater.Rate(g, ans)
+	ans.GPUIndexes, err = rater.Choose(g, demand)
 
-		if demand[position].Percent == 0 {
-			indexes[position] = NotNeedGPU
-			dfs(position + 1)
-			return
-		}
-		for i, gpu := range g {
-			if !gpu.CanAllocate(demand[position]) {
-				continue
-			}
-			gpu.Sub(demand[position])
-			indexes[position] = i
-			dfs(position + 1)
-			gpu.Add(demand[position])
-		}
-	}
-	dfs(0)
-	if ans == nil {
-		err = fmt.Errorf("allocate %s on %s failed", demand, g)
-	}
 	return
 }
 
@@ -186,11 +168,21 @@ func (gpus GPUs) Usage() float64 {
 }
 
 func (gpus GPUs) PercentUsed() int {
-	sumPercentUsed := 0
+	totalPercentUsed := 0
 	for _, r := range gpus {
-		sumPercentUsed += r.PercentTotal - r.Percent
+		totalPercentUsed += r.PercentTotal - r.Percent
 	}
-	return sumPercentUsed
+	return totalPercentUsed
+}
+
+func (gpus GPUs) PercentAvailableAndFreeGpuCount() (totalAvailable int, freeGpuCount int) {
+	for _, g := range gpus {
+		totalAvailable += g.Percent
+		if g.Percent == g.PercentTotal {
+			freeGpuCount++
+		}
+	}
+	return
 }
 
 func (gpus GPUs) UsageVariance() float64 {
@@ -202,3 +194,27 @@ func (gpus GPUs) UsageVariance() float64 {
 	}
 	return Variance(percentUsages)
 }
+
+func (gpus GPUs) ToSortableGPUs() SortableGPUs {
+	sortableGpus := make(SortableGPUs, 0)
+	for i, gpu := range gpus {
+		sortableGpu := &GPUResourceWithIndex{
+			GPUResource: &GPUResource{gpu.Percent, gpu.PercentTotal},
+			index:       i,
+		}
+		sortableGpus = append(sortableGpus, sortableGpu)
+	}
+
+	return sortableGpus
+}
+
+type GPUResourceWithIndex struct {
+	*GPUResource
+	index int
+}
+
+type SortableGPUs []*GPUResourceWithIndex
+
+func (g SortableGPUs) Len() int           { return len(g) }
+func (g SortableGPUs) Swap(i, j int)      { g[i], g[j] = g[j], g[i] }
+func (g SortableGPUs) Less(i, j int) bool { return g[i].Percent < g[j].Percent }

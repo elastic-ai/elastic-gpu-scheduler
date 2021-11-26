@@ -74,7 +74,7 @@ func PredicateRoute(predicate *scheduler.Predicate) httprouter.Handle {
 
 		if resultBody, err := json.Marshal(extenderFilterResult); err != nil {
 			// panic(err)
-			log.Warning("Failed due to %v", err)
+			log.Warningf("Failed due to %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
@@ -149,7 +149,7 @@ func BindRoute(bind *scheduler.Bind) httprouter.Handle {
 		}
 
 		if resultBody, err := json.Marshal(extenderBindingResult); err != nil {
-			log.Warningf("Failed due to ", err)
+			log.Warning("Failed due to ", err)
 			// panic(err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -223,7 +223,7 @@ func StatusRoute(d dealer.Dealer) httprouter.Handle {
 		}
 
 		if resultBody, err := json.Marshal(nodeMaps); err != nil {
-			log.Warningf("failed due to ", err)
+			log.Warning("failed due to ", err)
 			// panic(err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)

@@ -109,7 +109,7 @@ func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informer
 	// Create scheduler Cache
 	c.dealer, err = dealer.NewDealer(c.clientset, c.nodeLister, c.podLister, Rater)
 	if err != nil {
-		log.Error("create dealer failed: %s", err.Error())
+		log.Errorf("create dealer failed: %s", err.Error())
 		return nil, err
 	}
 
@@ -303,11 +303,11 @@ func (c *Controller) deletePodFromCache(obj interface{}) {
 		var ok bool
 		pod, ok = t.Obj.(*v1.Pod)
 		if !ok {
-			log.Warning("cannot convert to *v1.Pod: %v", t.Obj)
+			log.Warningf("cannot convert to *v1.Pod: %v", t.Obj)
 			return
 		}
 	default:
-		log.Warning("cannot convert to *v1.Pod: %v", t)
+		log.Warningf("cannot convert to *v1.Pod: %v", t)
 		return
 	}
 
