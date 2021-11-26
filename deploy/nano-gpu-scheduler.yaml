@@ -84,7 +84,7 @@ spec:
       serviceAccount: nano-gpu-scheduler
       containers:
         - name: nano-gpu-scheduler
-          image: nanogpu/nano-gpu-scheduler:0.2.0
+          image: nanogpu/nano-gpu-scheduler:0.3.0
           imagePullPolicy: Always
           command: ["/usr/bin/nano-gpu-scheduler"]
           args: ["--priority", "binpack", "--v", "2"]
