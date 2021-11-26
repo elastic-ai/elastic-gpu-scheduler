@@ -39,10 +39,10 @@ $ kubectl apply -f deploy/nano-gpu-scheduler.yaml
 ```
 
 3. Enable Kubernetes scheduler extender
-Add the following configuration to `extenders` section in the `--policy-config-file` file:
+Add the following configuration to `extenders` section in the `--policy-config-file` file (`<nano-gpu-scheduler-svc-clusterip>` is the cluster IP of `nano-gpu-scheduler service`, which can be found by `kubectl get svc nano-gpu-scheduler -n kube-system -o jsonpath='{.spec.clusterIP}' `):
 ```
 {
-  "urlPrefix": "http://<kube-apiserver-svc>/api/v1/namespaces/kube-system/services/nano-gpu-scheduler/proxy/scheduler",
+  "urlPrefix": "http://<nano-gpu-scheduler-svc-clusterip>:39999/scheduler",
   "filterVerb": "filter",
   "prioritizeVerb": "priorities",
   "bindVerb": "bind",
