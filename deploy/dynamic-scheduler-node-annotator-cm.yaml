@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dynamic-scheduler-policy
+  namespace: kube-system
+data:
+  policy.yaml: |
+    apiVersion: v1
+    kind: public-dynamic-scheduler
+    spec:
+      syncPeriod:
+        ##gpu usage
+        - name: gpu_core_usage_avg
+          period: 15s
+        - name: gpu_memory_usage_avg
+          period: 15s

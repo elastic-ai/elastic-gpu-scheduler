@@ -22,13 +22,13 @@ func (p Prioritize) Handler(args extender.ExtenderArgs) (*extender.HostPriorityL
 	return p.Func(pod, nodeNames)
 }
 
-func NewNanoGPUPrioritize(ctx context.Context, clientset *kubernetes.Clientset, d dealer.Dealer) *Prioritize {
+func NewNanoGPUPrioritize(ctx context.Context, clientset *kubernetes.Clientset, d dealer.Dealer, policySpec dealer.PolicySpec, isLoadSchedule bool) *Prioritize {
 	return &Prioritize{
 		Name: "NanoGPUSorter",
 		Func: func(pod *v1.Pod, nodeNames []string) (*extender.HostPriorityList, error) {
 			var priorityList extender.HostPriorityList
 			priorityList = make([]extender.HostPriority, len(nodeNames))
-			scores := d.Score(nodeNames, pod)
+			scores := d.Score(nodeNames, pod, policySpec, isLoadSchedule)
 			for i, score := range scores {
 				priorityList[i] = extender.HostPriority{
 					Host:  nodeNames[i],

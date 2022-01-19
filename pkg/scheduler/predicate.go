@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 
 	v1 "k8s.io/api/core/v1"
@@ -41,12 +40,13 @@ func (p Predicate) Handler(args extender.ExtenderArgs) *extender.ExtenderFilterR
 	return &result
 }
 
-func NewNanoGPUPredicate(ctx context.Context, clientset *kubernetes.Clientset, d dealer.Dealer) *Predicate {
+func NewNanoGPUPredicate(ctx context.Context, clientset *kubernetes.Clientset, d dealer.Dealer, policySpec dealer.PolicySpec, isLoadSchedule bool) *Predicate {
 	return &Predicate{
 		Name: "NanoGPUFilter",
 		Func: func(pod *v1.Pod, nodeNames []string, d dealer.Dealer) ([]bool, []error) {
+
 			log.Infof("Check if the pod %s/%s can be scheduled on nodes %v", pod.Namespace, pod.Name, nodeNames)
-			return d.Assume(nodeNames, pod)
+			return d.Assume(nodeNames, pod, policySpec, isLoadSchedule)
 		},
 		Dealer: d,
 	}

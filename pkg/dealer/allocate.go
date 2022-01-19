@@ -5,16 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-
-	v1 "k8s.io/api/core/v1"
-
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog"
+	"math"
 )
 
 const (
 	NotNeedGPU = -1
-)
+	LoadTotal  = 2
 
+)
+var Priority = []string{"gpu_core_usage_avg_15s","gpu_memory_usage_avg_15s"}
 // GPUResource ─┬─> GPUs
 //              └─> Demand ─> Plan
 
@@ -76,7 +78,7 @@ func (d *Demand) ToSortableGPUs() SortableGPUs {
 	sortableGpus := make(SortableGPUs, 0)
 	for i, gpu := range *d {
 		sortableGpu := &GPUResourceWithIndex{
-			GPUResource: &GPUResource{gpu.Percent, gpu.PercentTotal},
+			GPUResource: &GPUResource{gpu.Percent, gpu.PercentTotal, 0},
 			index:       i,
 		}
 		sortableGpus = append(sortableGpus, sortableGpu)
@@ -87,11 +89,11 @@ func (d *Demand) ToSortableGPUs() SortableGPUs {
 
 type GPUs []*GPUResource
 
-func (g GPUs) Choose(demand Demand, rater Rater) (ans *Plan, err error) {
+func (g GPUs) Choose(demand Demand, rater Rater, d Dealer, policySpec PolicySpec, nodeName string, isLoadSchedule bool) (ans *Plan, err error) {
 	ans = &Plan{
 		Demand: demand,
 	}
-	ans.Score = rater.Rate(g, ans)
+	ans.Score = rater.Rate(g, ans, d, policySpec, nodeName, isLoadSchedule)
 	ans.GPUIndexes, err = rater.Choose(g, demand)
 
 	return
@@ -139,6 +141,7 @@ func (g GPUs) String() string {
 type GPUResource struct {
 	Percent      int
 	PercentTotal int
+	RemainLoad   int
 }
 
 func (g GPUResource) String() string {
@@ -165,6 +168,30 @@ func (gpus GPUs) Usage() float64 {
 		percentUsed += r.PercentTotal - r.Percent
 	}
 	return float64(percentUsed) / float64(percentSum)
+}
+
+func (g *GPUResource) LoadUsage(d Dealer, gpuIndex int, policySpec PolicySpec, nodeName string) float64 {
+	var usage float64 = 0
+	for _, priorityPolicy := range policySpec.SyncPeriod {
+		activeDuration, err := getActiveDuration(policySpec.SyncPeriod, priorityPolicy.Name)
+		if err != nil || activeDuration == 0 {
+			klog.Warningf("getScore %s, getactiveDuration error %s", priorityPolicy.Name, err)
+			continue
+		}
+		exist, priorityUsage, err := d.GetUsage(nodeName, priorityPolicy.Name, gpuIndex, activeDuration)
+		klog.Infof("gpu: %d, name : %s, usage : %f",gpuIndex, priorityPolicy.Name, priorityUsage)
+		if !exist {
+			continue
+		}
+		if err != nil {
+			klog.Errorf("error %v when get score, set %s score=0", err, priorityPolicy.Name)
+			continue
+		}
+		priorityUsage = math.Ceil(10*priorityUsage) / 10
+		usage += priorityUsage
+	}
+    g.RemainLoad = LoadTotal - int(usage)
+	return usage
 }
 
 func (gpus GPUs) PercentUsed() int {
@@ -199,7 +226,7 @@ func (gpus GPUs) ToSortableGPUs() SortableGPUs {
 	sortableGpus := make(SortableGPUs, 0)
 	for i, gpu := range gpus {
 		sortableGpu := &GPUResourceWithIndex{
-			GPUResource: &GPUResource{gpu.Percent, gpu.PercentTotal},
+			GPUResource: &GPUResource{gpu.Percent, gpu.PercentTotal,gpu.RemainLoad},
 			index:       i,
 		}
 		sortableGpus = append(sortableGpus, sortableGpu)
@@ -217,4 +244,4 @@ type SortableGPUs []*GPUResourceWithIndex
 
 func (g SortableGPUs) Len() int           { return len(g) }
 func (g SortableGPUs) Swap(i, j int)      { g[i], g[j] = g[j], g[i] }
-func (g SortableGPUs) Less(i, j int) bool { return g[i].Percent < g[j].Percent }
+func (g SortableGPUs) Less(i, j int) bool { return g[i].Percent + g[i].RemainLoad * 50 < g[j].Percent + g[j].RemainLoad * 50}

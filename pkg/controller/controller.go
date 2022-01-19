@@ -2,6 +2,10 @@ package controller
 
 import (
 	"fmt"
+	"github.com/nano-gpu/nano-gpu-scheduler/pkg/prometheus"
+	yaml "gopkg.in/yaml.v2"
+	"io/ioutil"
+	"k8s.io/klog"
 	"time"
 
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
@@ -27,6 +31,10 @@ var (
 	KeyFunc = clientgocache.DeletionHandlingMetaNamespaceKeyFunc
 )
 
+const (
+	defaultBackOff = 10 * time.Second
+	maxBackOff     = 360 * time.Second
+)
 var Rater dealer.Rater
 
 type Controller struct {
@@ -56,18 +64,26 @@ type Controller struct {
 	nodeInformerSynced clientgocache.InformerSynced
 
 	dealer dealer.Dealer
+
+	nodeQueue  workqueue.RateLimitingInterface
+
+	Prom       prometheus.PromAPIS
+
+	policy     []dealer.Period
+
+	isLoadSchedule  bool
 }
 
-func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informers.SharedInformerFactory, stopCh <-chan struct{}) (c *Controller, err error) {
+func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informers.SharedInformerFactory, prometheusUrl string, instancePort string, policyConfigPath string, syncPeriod time.Duration, isLoadSchedule bool, stopCh <-chan struct{}) (c *Controller, err error) {
 	log.Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "nano-gpu-scheduler"})
 
 	c = &Controller{
-		clientset: clientset,
-		podQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "podQueue"),
-		recorder:  recorder,
+		clientset:      clientset,
+		podQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "podQueue"),
+		recorder:       recorder,
 	}
 	// Create pod informer.
 	podInformer := kubeInformerFactory.Core().V1().Pods()
@@ -100,9 +116,22 @@ func NewController(clientset *kubernetes.Clientset, kubeInformerFactory informer
 
 	// Create node informer
 	nodeInformer := kubeInformerFactory.Core().V1().Nodes()
+	nodeInformer.Informer().AddEventHandlerWithResyncPeriod(clientgocache.ResourceEventHandlerFuncs{},
+		syncPeriod,
+	)
 	c.nodeLister = nodeInformer.Lister()
 	c.nodeInformerSynced = nodeInformer.Informer().HasSynced
 
+	if isLoadSchedule {
+		c.nodeQueue = workqueue.NewNamedRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(defaultBackOff, maxBackOff), "syncMetric")
+		c.Prom = prometheus.NewPromConfig(prometheusUrl, instancePort)
+		c.isLoadSchedule = isLoadSchedule
+		c.policy = getSyncPeriodFormPolicyConfig(policyConfigPath)
+		if len(c.policy) < 1 {
+			panic("sync policy config error")
+		}
+
+	}
 	// Start informer goroutines.
 	go kubeInformerFactory.Start(stopCh)
 
@@ -140,6 +169,13 @@ func (c *Controller) GetDealer() dealer.Dealer {
 func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	defer c.podQueue.ShutDown()
+	if c.isLoadSchedule {
+		defer c.nodeQueue.ShutDown()
+		for _, periodItem := range c.policy {
+			go c.syncMetricLoop(periodItem.Name, periodItem.Period)
+		}
+	}
+
 
 	log.Info("Starting GPU Sharing Controller.")
 	log.Info("Waiting for informer caches to sync")
@@ -147,6 +183,10 @@ func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 	log.Infof("Starting %v workers.", threadiness)
 	for i := 0; i < threadiness; i++ {
 		go wait.Until(c.runWorker, time.Second, stopCh)
+		if c.isLoadSchedule {
+			go wait.Until(c.nodeWorker, time.Second, stopCh)
+		}
+
 	}
 
 	log.Info("Started workers")
@@ -315,3 +355,18 @@ func (c *Controller) deletePodFromCache(obj interface{}) {
 
 	c.dealer.Forget(pod)
 }
+
+func getSyncPeriodFormPolicyConfig(path string) []dealer.Period {
+	syncPolicy := new(dealer.Policy)
+	yamlFile, err := ioutil.ReadFile(path)
+	if err != nil {
+		klog.Errorf("ioutil.ReadFile policy yaml error: %v", err)
+	}
+
+	err = yaml.Unmarshal(yamlFile, syncPolicy)
+	if err != nil {
+		klog.Errorf("Unmarshal policy yaml error: %v", err)
+	}
+	return syncPolicy.Spec.SyncPeriod
+}
+

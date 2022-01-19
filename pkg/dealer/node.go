@@ -2,7 +2,6 @@ package dealer
 
 import (
 	"fmt"
-
 	schetypes "github.com/nano-gpu/nano-gpu-scheduler/pkg/types"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/utils"
 	v1 "k8s.io/api/core/v1"
@@ -17,10 +16,10 @@ type NodeInterface interface {
 }
 
 type NodeInfo struct {
-	Rater     Rater
-	Name      string
-	GPUs      GPUs
-	PlanCache map[string]*Plan
+	Rater       Rater
+	Name        string
+	GPUs        GPUs
+	PlanCache   map[string]*Plan
 }
 
 func NewNodeInfo(name string, node *v1.Node, rater Rater) *NodeInfo {
@@ -42,14 +41,14 @@ func NewNodeInfo(name string, node *v1.Node, rater Rater) *NodeInfo {
 	}
 }
 
-func (ni *NodeInfo) Assume(demand Demand) (bool, error) {
+func (ni *NodeInfo) Assume(demand Demand, d Dealer, policySpec PolicySpec, isLoadSchedule bool) (bool, error) {
 	key := demand.Hash()
 
 	if _, ok := ni.PlanCache[key]; ok {
 		return true, nil
 	}
 
-	plan, err := ni.GPUs.Choose(demand, ni.Rater)
+	plan, err := ni.GPUs.Choose(demand, ni.Rater, d, policySpec, ni.Name, isLoadSchedule)
 	if err != nil {
 		return false, err
 	}
@@ -57,22 +56,22 @@ func (ni *NodeInfo) Assume(demand Demand) (bool, error) {
 	return true, nil
 }
 
-func (ni *NodeInfo) Score(demands Demand) int {
+func (ni *NodeInfo) Score(demands Demand, d Dealer, policySpec PolicySpec, isLoadSchedule bool) int {
 	key := demands.Hash()
 	_, ok := ni.PlanCache[key]
 	if !ok {
-		if assumed, _ := ni.Assume(demands); !assumed {
+		if assumed, _ := ni.Assume(demands, d, policySpec, isLoadSchedule); !assumed {
 			return ScoreMin
 		}
 	}
 	return ni.PlanCache[key].Score
 }
 
-func (ni *NodeInfo) Bind(demands Demand) (*Plan, error) {
+func (ni *NodeInfo) Bind(demands Demand, d Dealer, policySpec PolicySpec, isLoadSchedule bool) (*Plan, error) {
 	key := demands.Hash()
 	_, ok := ni.PlanCache[key]
 	if !ok {
-		if assumed, _ := ni.Assume(demands); !assumed {
+		if assumed, _ := ni.Assume(demands, d, policySpec, isLoadSchedule); !assumed {
 			return nil, fmt.Errorf("assume %s on %s failed", demands, ni.GPUs)
 		}
 	}

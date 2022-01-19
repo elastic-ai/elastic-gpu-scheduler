@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	DSCtx "github.com/nano-gpu/nano-gpu-scheduler/pkg/context"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/controller"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/dealer"
 	"github.com/nano-gpu/nano-gpu-scheduler/pkg/routes"
@@ -29,6 +30,13 @@ var (
 	clientset         *kubernetes.Clientset
 	resyncPeriod      = 30 * time.Second
 	PriorityAlgorithm string
+	PolicyConfigPath  string
+	DefaultPolicyConfigPath = "/data/policy.yaml"
+	PrometheusUrl     string
+	InstancePort      string
+	SyncPeriod        time.Duration
+	isLoadSchedule    bool
+
 )
 
 func initKubeClient() {
@@ -54,6 +62,14 @@ func initKubeClient() {
 
 func InitFlag() {
 	flag.StringVar(&PriorityAlgorithm, "priority", "binpack", "priority algorithm, binpack/spread")
+	flag.StringVar(&PolicyConfigPath, "policyConfigPath", DefaultPolicyConfigPath, "Policy Config Path")
+	flag.StringVar(&PrometheusUrl, "prometheusUrl", "http://thanos-prometheus.kube-system:80",
+		"The prometheus url, default: http://thanos-prometheus.kube-system:80.")
+	flag.StringVar(&InstancePort, "instancePort",  "9100", "The instance port, default: 9100")
+	flag.DurationVar(&SyncPeriod, "sync-period",  time.Second * 5, "sync period")
+	flag.BoolVar(&isLoadSchedule, "isLoadSchedule",  false, "Is load scheduling enabled")
+
+
 }
 
 func main() {
@@ -84,9 +100,8 @@ func main() {
 
 	// Set up signals so we handle the first shutdown signal gracefully.
 	stopCh := signals.SetupSignalHandler()
-
 	informerFactory := informers.NewSharedInformerFactory(clientset, resyncPeriod)
-	schudulerController, err := controller.NewController(clientset, informerFactory, stopCh)
+	schudulerController, err := controller.NewController(clientset, informerFactory, PrometheusUrl, InstancePort, PolicyConfigPath, SyncPeriod, isLoadSchedule, stopCh)
 	if err != nil {
 		log.Fatalf("Failed to start due to %v", err)
 		return
@@ -96,10 +111,16 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var policy dealer.PolicySpec
+	if isLoadSchedule {
+		context := DSCtx.NewDSContext(PolicyConfigPath)
+		context.Start()
+		policy = context.GetPolicySpec()
+	}
 
-	predicate := scheduler.NewNanoGPUPredicate(ctx, clientset, schudulerController.GetDealer())
-	prioritize := scheduler.NewNanoGPUPrioritize(ctx, clientset, schudulerController.GetDealer())
-	bind := scheduler.NewNanoGPUBind(ctx, clientset, schudulerController.GetDealer())
+	predicate := scheduler.NewNanoGPUPredicate(ctx, clientset, schudulerController.GetDealer(), policy, isLoadSchedule)
+	prioritize := scheduler.NewNanoGPUPrioritize(ctx, clientset, schudulerController.GetDealer(), policy, isLoadSchedule)
+	bind := scheduler.NewNanoGPUBind(ctx, clientset, schudulerController.GetDealer(), policy, isLoadSchedule)
 
 	router := httprouter.New()
 	routes.AddPProf(router)

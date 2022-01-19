@@ -30,8 +30,8 @@ func TestBinpackRate(t *testing.T) {
 
 	binpack := &Binpack{}
 
-	s1 := binpack.Rate(gpus1, nil)
-	s2 := binpack.Rate(gpus2, nil)
+	s1 := binpack.Rate(gpus1, nil,nil,PolicySpec{})
+	s2 := binpack.Rate(gpus2, nil,nil,PolicySpec{})
 
 	assert.True(t, s1 < s2)
 }
@@ -123,8 +123,8 @@ func TestSpreadRate(t *testing.T) {
 	spread := &Spread{}
 
 	for _, testCase := range testCases {
-		s1 := spread.Rate(testCase.gpus1, nil)
-		s2 := spread.Rate(testCase.gpus2, nil)
+		s1 := spread.Rate(testCase.gpus1, nil,nil,PolicySpec{})
+		s2 := spread.Rate(testCase.gpus2, nil,nil,PolicySpec{})
 
 		assert.Equal(t, testCase.firstIsPreferred, s1 > s2)
 	}

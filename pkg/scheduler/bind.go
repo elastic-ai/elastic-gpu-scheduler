@@ -34,7 +34,7 @@ func (b Bind) Handler(args extender.ExtenderBindingArgs) *extender.ExtenderBindi
 	}
 }
 
-func NewNanoGPUBind(ctx context.Context, clientset *kubernetes.Clientset, d dealer.Dealer) *Bind {
+func NewNanoGPUBind(ctx context.Context, clientset *kubernetes.Clientset, d dealer.Dealer, policySpec dealer.PolicySpec, isLoadSchedule bool) *Bind {
 	return &Bind{
 		Name: "NanoGPUBinder",
 		Func: func(name string, namespace string, podUID types.UID, node string, d dealer.Dealer) error {
@@ -49,7 +49,7 @@ func NewNanoGPUBind(ctx context.Context, clientset *kubernetes.Clientset, d deal
 				return err
 			}
 
-			err = d.Bind(node, pod)
+			err = d.Bind(node, pod, policySpec, isLoadSchedule)
 			d.PrintStatus(pod, "bind")
 
 			return err

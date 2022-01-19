@@ -14,14 +14,14 @@ const (
 )
 
 type Rater interface {
-	Rate(GPUs, *Plan) int
+	Rate(gpus GPUs, p *Plan, d Dealer, policySpec PolicySpec, nodeName string, isLoadSchedule bool) int
 	Choose(GPUs, Demand) ([]int, error)
 }
 
 type SampleRater struct {
 }
 
-func (sr *SampleRater) Rate(GPUs, *Plan) int {
+func (sr *SampleRater) Rate(gpus GPUs, p *Plan, d Dealer, policySpec PolicySpec, nodeName string, isLoadSchedule bool) int {
 	return ScoreMax
 }
 
@@ -56,10 +56,17 @@ type Spread struct {
 }
 
 // binpack will rate higher score to nodes with more usage and less gpus
-func (bp *Binpack) Rate(gpus GPUs, p *Plan) int {
+func (bp *Binpack) Rate(gpus GPUs, p *Plan, d Dealer, policySpec PolicySpec, nodeName string, isLoadSchedule bool) int {
 	usage := gpus.Usage()
+	var loadUsage float64
+	if isLoadSchedule {
+		for i, g := range gpus {
+			loadUsage += g.LoadUsage(d, i, policySpec, nodeName)
+		}
+	}
 
-	return int(usage*100) - len(gpus)
+	loadUsageInt := int(loadUsage) / len(gpus)
+	return int(usage * 100) + loadUsageInt * 50 - len(gpus)
 }
 
 // binpack will put as much conainters on same gpu card as possible, by
@@ -103,10 +110,16 @@ func (bp *Binpack) Choose(gpus GPUs, d Demand) ([]int, error) {
 }
 
 // Spread expect to choose the node with more free gpu cards, more total available gpu and less gpus
-func (sp *Spread) Rate(gpus GPUs, p *Plan) int {
+func (sp *Spread) Rate(gpus GPUs, p *Plan, d Dealer, policySpec PolicySpec, nodeName string, isLoadSchedule bool) int {
 	totalAvailable, freeGpuCount := gpus.PercentAvailableAndFreeGpuCount()
-
-	return 100*freeGpuCount + totalAvailable/10 - len(gpus)
+	var loadUsage float64
+	if isLoadSchedule {
+		for i, g := range gpus {
+			loadUsage += g.LoadUsage(d, i, policySpec, nodeName)
+		}
+	}
+	loadUsageInt := int(loadUsage) / len(gpus)
+	return 100*freeGpuCount + totalAvailable/10 - len(gpus) - loadUsageInt
 }
 
 // spread will spread conainters accross all gpu cards, by

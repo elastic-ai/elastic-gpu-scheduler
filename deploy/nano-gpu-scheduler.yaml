@@ -84,13 +84,21 @@ spec:
       serviceAccount: nano-gpu-scheduler
       containers:
         - name: nano-gpu-scheduler
-          image: nanogpu/nano-gpu-scheduler:0.3.0
+          image: nanogpu/nano-gpu-scheduler:0.4.0
           imagePullPolicy: Always
           command: ["/usr/bin/nano-gpu-scheduler"]
-          args: ["--priority", "binpack", "--v", "2"]
+          volumeMounts:
+            - mountPath: /data
+              name: dynamic-scheduler-policy
+          args: ["--priority", "binpack", "--policyConfigPath", "/data/policy.yaml", "--prometheusUrl", "http://10.0.200.47:9090", "--isLoadSchedule", "true"]
           env:
             - name: PORT
               value: "39999"
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: dynamic-scheduler-policy
+          name: dynamic-scheduler-policy
 ---
 apiVersion: v1
 kind: Service
