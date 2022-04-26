@@ -4,7 +4,7 @@
 ## About This Project
 With the continuous evolution of cloud native AI scenarios, more and more users run AI tasks on Kubernetes, which also brings more and more challenges to GPU resource scheduling. 
 
-*Elastic gpu scheduler* is a gpu scheduling framework based on Kubernetes, which focuses on fine-grained gpu resource scheduling and allocation.
+*Elastic gpu scheduler* is a gpu scheduling framework based on Kubernetes, which focuses on gpu sharing and allocation.
 
 You may also be interested in *Elastic GPU Agent* which is a Kubernetes device plugin implement.
 
@@ -51,7 +51,10 @@ Add the following configuration to `extenders` section in the `--policy-config-f
   "nodeCacheCapable": true,
   "managedResources": [
     {
-      "name": "elastic-gpu/gpu-percent"
+      "name": "elasticgpu.io/gpu-memory"
+    },
+    {
+      "name": "elasticgpu.io/gpu-core"
     }
   ]
 }
@@ -84,21 +87,18 @@ spec:
           command: [ "sleep", "100000" ]
           resources:
             limits:
-              elastic-gpu/gpu-percent: "20" 
+              elasticgpu.io/gpu-memory: "256" // 256MB memory 
 EOF
 ```
 
 <!-- ROADMAP -->
 
 ## Roadmap
-- Support GPU share
-- Support GPU monitor at pod and container level
-- Support single container multi-card scheduling
 - Support GPU topology-aware scheduling
 - Support GPU load-aware scheduling
-- Migrate to Kubernetes scheduler framework
 
 <!-- LICENSE -->
+
 ## License
 Distributed under the [Apache License](./LICENSE).
 
