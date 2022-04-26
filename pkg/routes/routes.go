@@ -2,10 +2,12 @@ package routes
 
 import (
 	"bytes"
+	"elasticgpu.io/elastic-gpu-scheduler/pkg/scheduler"
 	"elasticgpu.io/elastic-gpu-scheduler/pkg/server"
 	"encoding/json"
 	"fmt"
 	"io"
+	v1 "k8s.io/api/core/v1"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -20,7 +22,7 @@ const (
 	bindPrefix       = apiPrefix + "/bind"
 	predicatesPrefix = apiPrefix + "/filter"
 	prioritiesPrefix = apiPrefix + "/priorities"
-	statusPrefix     = "/status"
+	statusPrefix     = apiPrefix + "/status"
 )
 
 var (
@@ -37,9 +39,6 @@ func checkBody(w http.ResponseWriter, r *http.Request) {
 func PredicateRoute(predicate *server.Predicate) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		checkBody(w, r)
-
-		// mu.RLock()
-		// defer mu.RUnlock()
 
 		var buf bytes.Buffer
 		body := io.TeeReader(r.Body, &buf)
@@ -198,32 +197,25 @@ func AddBind(router *httprouter.Router, bind *server.Bind) {
 	}
 }
 
-//func StatusRoute(d scheduler.Dealer) httprouter.Handle {
-//	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-//		nodeMaps, err := d.Status()
-//		w.Header().Set("Content-Type", "application/json")
-//		if err != nil {
-//			log.Warningf("failed to get status: %v", err)
-//
-//			w.WriteHeader(http.StatusInternalServerError)
-//			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
-//			w.Write([]byte(errMsg))
-//			return
-//		}
-//
-//		if resultBody, err := json.Marshal(nodeMaps); err != nil {
-//			log.Warning("failed due to ", err)
-//			// panic(err)
-//			w.Header().Set("Content-Type", "application/json")
-//			w.WriteHeader(http.StatusInternalServerError)
-//			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
-//			w.Write([]byte(errMsg))
-//		} else {
-//			w.Header().Set("Content-Type", "application/json")
-//			w.WriteHeader(http.StatusOK)
-//
-//			w.Write(resultBody)
-//		}
-//
-//	}
-//}
+func AddStatus(router *httprouter.Router, sches map[v1.ResourceName]scheduler.ResourceScheduler) {
+	router.GET(statusPrefix, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		result := make(map[string]string)
+		for k, v := range sches {
+			result[string(k)] = v.Status()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if resultBody, err := json.Marshal(result); err != nil {
+			log.Warning("failed due to ", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
+			w.Write([]byte(errMsg))
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			w.Write(resultBody)
+		}
+
+	})
+}

@@ -84,10 +84,10 @@ spec:
       serviceAccount: elastic-gpu-scheduler
       containers:
         - name: elastic-gpu-scheduler
-          image: elasticgpu/elastic-gpu-scheduler:0.3.0
+          image: ccr.ccs.tencentyun.com/elasticai/elastic-gpu-scheduler
           imagePullPolicy: Always
           command: ["/usr/bin/elastic-gpu-scheduler"]
-          args: ["--priority", "binpack", "--v", "2"]
+          args: ["-priority", "binpack", "-mode", "gpushare"]
           env:
             - name: PORT
               value: "39999"

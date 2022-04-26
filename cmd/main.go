@@ -19,13 +19,13 @@ import (
 
 var (
 	PriorityAlgorithm string
-	KubeconfigPath    string
+	Kubeconf          string
 	ResourceMode      string
 )
 
 func InitFlag() {
 	flag.StringVar(&PriorityAlgorithm, "priority", "binpack", "priority algorithm, binpack/spread")
-	flag.StringVar(&KubeconfigPath, "kubeconf", "kubeconf", "path to kubeconfig")
+	flag.StringVar(&Kubeconf, "kubeconf", "", "path to kubeconfig")
 	flag.StringVar(&ResourceMode, "mode", "", "resource mode, pgpu/qgpu/gpushare")
 }
 
@@ -35,7 +35,7 @@ func main() {
 	flag.Parse()
 
 	// init kubernetes clientset
-	clientset, egpuClientset, err := utils.InitKubeClientset(KubeconfigPath)
+	clientset, egpuClientset, err := utils.InitKubeClientset(Kubeconf)
 	if err != nil {
 		klog.Fatalf("failed to init kube client: %v", err)
 	}
@@ -92,6 +92,7 @@ func main() {
 	routes.AddPredicate(router, predicate)
 	routes.AddPrioritize(router, prioritize)
 	routes.AddBind(router, bind)
+	routes.AddStatus(router, schs)
 
 	klog.Infof("server starting on the port: %s", port)
 	if err := http.ListenAndServe(":"+port, router); err != nil {

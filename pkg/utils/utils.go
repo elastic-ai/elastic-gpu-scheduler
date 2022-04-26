@@ -5,10 +5,10 @@ import (
 	"elasticgpu.io/elastic-gpu/clientset/versioned"
 	"encoding/gob"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"math"
-	"os"
 )
 
 func DeepCopy(dst, src interface{}) error {
@@ -42,27 +42,24 @@ func Variance(value []float64) float64 {
 }
 
 func InitKubeClientset(kubeconf string) (clientset *kubernetes.Clientset, egpuClientset *versioned.Clientset, err error) {
-	kubeConfig := ""
-	if kubeconf != "" {
-		kubeConfig = kubeconf
-	} else if len(os.Getenv(RecommendedKubeConfigPathEnv)) > 0 {
-		// use the current context in kubeconfig
-		// This is very useful for running locally.
-		kubeConfig = os.Getenv(RecommendedKubeConfigPathEnv)
+	var kubeconfig *rest.Config
+	if kubeconf == "" {
+		kubeconfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		kubeconfig, err = clientcmd.BuildConfigFromFlags("", kubeconf)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
-	// Get kubernetes config.
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
-	if err != nil {
-		klog.Fatalf("Error building kubeconfig: %s", err.Error())
-	}
-
-	// create the clientset
-	clientset, err = kubernetes.NewForConfig(restConfig)
+	clientset, err = kubernetes.NewForConfig(kubeconfig)
 	if err != nil {
 		klog.Fatalf("Failed to init clientset due to %v", err)
 	}
-	egpuClientset, err = versioned.NewForConfig(restConfig)
+	egpuClientset, err = versioned.NewForConfig(kubeconfig)
 	if err != nil {
 		klog.Fatalf("Failed to init egpu clientset due to %v", err)
 	}

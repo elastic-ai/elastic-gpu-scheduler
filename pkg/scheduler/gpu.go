@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"encoding/json"
 	"fmt"
 	"k8s.io/klog/v2"
 )
@@ -20,12 +21,12 @@ type GPU struct {
 	MemoryAvailable int
 	CoreTotal       int
 	MemoryTotal     int
-	GPUUnits        []GPUUnit
+	//GPUUnits        []GPUUnit
 }
 
-func (g *GPU) String() string {
-	return fmt.Sprintf("(%d, %d, %d)", g.CoreAvailable, g.MemoryAvailable, len(g.GPUUnits))
-}
+//func (g *GPU) String() string {
+//	return fmt.Sprintf("(%d, %d, %d)", g.CoreAvailable, g.MemoryAvailable, len(g.GPUUnits))
+//}
 
 func (g *GPU) Add(resource GPUUnit) {
 	if resource.GPUCount > 0 {
@@ -55,6 +56,11 @@ func (g *GPU) CanAllocate(resource GPUUnit) bool {
 }
 
 type GPUs []*GPU
+
+func (g GPUs) String() string {
+	r, _ := json.Marshal(g)
+	return string(r)
+}
 
 func (g GPUs) Trade(rater Rater, request GPURequest) (option *GPUOption, err error) {
 	klog.Infof("Trade: %s", request)
@@ -123,29 +129,30 @@ func (g GPUs) Trade(rater Rater, request GPURequest) (option *GPUOption, err err
 	return option, nil
 }
 
-func (gpus GPUs) CoreUsage() float64 {
-	coreUsed, coreAvailable := 0, 0
-	for _, g := range gpus {
-		for _, r := range g.GPUUnits {
-			coreUsed += r.Core
-		}
-		coreAvailable += g.CoreAvailable
-	}
-	return float64(coreUsed) / (float64(coreUsed+coreAvailable+1) + 0.1)
-}
+//func (gpus GPUs) CoreUsage() float64 {
+//	coreUsed, coreAvailable := 0, 0
+//	for _, g := range gpus {
+//		for _, r := range g.GPUUnits {
+//			coreUsed += r.Core
+//		}
+//		coreAvailable += g.CoreAvailable
+//	}
+//	return float64(coreUsed) / (float64(coreUsed+coreAvailable+1) + 0.1)
+//}
 
-func (gpus GPUs) MemoryUsage() float64 {
-	memUsed, memAvailable := 0, 0
-	for _, g := range gpus {
-		for _, r := range g.GPUUnits {
-			memUsed += r.Memory
-		}
-		memAvailable += g.MemoryAvailable
-	}
-	return float64(memUsed) / (float64(memUsed+memAvailable) + 0.1)
-}
+//func (gpus GPUs) MemoryUsage() float64 {
+//	memUsed, memAvailable := 0, 0
+//	for _, g := range gpus {
+//		for _, r := range g.GPUUnits {
+//			memUsed += r.Memory
+//		}
+//		memAvailable += g.MemoryAvailable
+//	}
+//	return float64(memUsed) / (float64(memUsed+memAvailable) + 0.1)
+//}
 
 func (g GPUs) Transact(option *GPUOption) error {
+	klog.V(5).Infof("gpu %+v transacts %+v", g, option)
 	for i := 0; i < len(option.Allocated); i++ {
 		if option.Request[i].GPUCount > 0 {
 			for j := 0; j < len(option.Allocated[i]); j++ {
@@ -170,10 +177,10 @@ func (g GPUs) Cancel(option *GPUOption) error {
 	for i := 0; i < len(option.Request); i++ {
 		if option.Request[i].GPUCount > 0 {
 			for _, gpuIndex := range option.Allocated[i] {
-				g[gpuIndex].Add(option.Request[i])
+				g[gpuIndex].Sub(option.Request[i])
 			}
 		} else {
-			g[option.Allocated[i][0]].Add(option.Request[i])
+			g[option.Allocated[i][0]].Sub(option.Request[i])
 		}
 	}
 	return nil

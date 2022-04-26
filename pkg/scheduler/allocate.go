@@ -5,7 +5,10 @@ import (
 	"crypto/sha256"
 	"elasticgpu.io/elastic-gpu-scheduler/pkg/utils"
 	"encoding/hex"
+	"fmt"
 	v1 "k8s.io/api/core/v1"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -64,4 +67,22 @@ func NewGPUOption(request GPURequest) *GPUOption {
 		Score:     0,
 	}
 	return opt
+}
+
+func NewGPUOptionFromPod(pod *v1.Pod, core v1.ResourceName, mem v1.ResourceName) *GPUOption {
+	request := NewGPURequest(pod, core, mem)
+	option := NewGPUOption(request)
+	for i, c := range pod.Spec.Containers {
+		if k, ok := pod.Annotations[fmt.Sprintf(utils.AnnotationEGPUContainer, c.Name)]; ok {
+			ids := strings.Split(pod.Annotations[k], ",")
+			idsInt := make([]int, 0)
+			for _, s := range ids {
+				id, _ := strconv.Atoi(s)
+				idsInt = append(idsInt, id)
+			}
+			option.Allocated[i] = idsInt
+		}
+	}
+
+	return option
 }

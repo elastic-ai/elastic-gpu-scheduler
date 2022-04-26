@@ -1,4 +1,4 @@
-FROM golang:1.16-stretch as build
+FROM golang:1.17-stretch as build
 
 ENV GO111MODULE=on
 ENV CGO_ENABLED=1

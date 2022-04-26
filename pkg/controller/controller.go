@@ -246,7 +246,7 @@ func (c *Controller) updatePodInCache(oldObj, newObj interface{}) {
 		needUpdate = true
 	}
 	// 2. Need update when it's unknown and unreleased pod, and GPU annotation has been set
-	if !c.knownPod(oldPod) && !c.podReleased(oldPod) && scheduler.IsAssumed(newPod) {
+	if !c.knownPod(oldPod) && !c.releasedPod(oldPod) && scheduler.IsAssumed(newPod) {
 		needUpdate = true
 	}
 	if needUpdate {
@@ -303,15 +303,15 @@ func (c *Controller) releasePod(pod *v1.Pod) error {
 	if err != nil {
 		return err
 	}
-	return d.Release(pod)
+	return d.ForgetPod(pod)
 }
 
-func (c *Controller) podReleased(pod *v1.Pod) bool {
+func (c *Controller) releasedPod(pod *v1.Pod) bool {
 	d, err := scheduler.GetResourceScheduler(pod, c.RegisteredSchedulers)
 	if err != nil {
 		return false
 	}
-	return d.PodReleased(pod)
+	return d.ReleasedPod(pod)
 }
 
 func (c *Controller) knownPod(pod *v1.Pod) bool {
@@ -327,5 +327,5 @@ func (c *Controller) assignPod(pod *v1.Pod) error {
 	if err != nil {
 		return nil
 	}
-	return d.Allocate(pod)
+	return d.AddPod(pod)
 }

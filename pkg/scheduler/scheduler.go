@@ -31,11 +31,11 @@ type ResourceScheduler interface {
 	Assume(nodes []string, pod *v1.Pod) ([]string, map[string]string, error)
 	Score(node []string, pod *v1.Pod) []int
 	Bind(node string, pod *v1.Pod) error
-	Allocate(pod *v1.Pod) error
-	Release(pod *v1.Pod) error
-	Forget(pod *v1.Pod) error
+	AddPod(pod *v1.Pod) error
+	ForgetPod(pod *v1.Pod) error
 	KnownPod(pod *v1.Pod) bool
-	PodReleased(pod *v1.Pod) bool
+	ReleasedPod(pod *v1.Pod) bool
+	Status() string
 }
 
 type BaseScheduler struct {
@@ -74,7 +74,11 @@ func (d *BaseScheduler) getNodeInfo(name string) (*NodeAllocator, error) {
 	if err != nil {
 		return nil, err
 	}
-	na := NewNodeAllocator(pods.Items, node, d.coreName, d.memName, d.rater)
+	na, err := NewNodeAllocator(pods.Items, node, d.coreName, d.memName, d.rater)
+	if err != nil {
+		return nil, err
+	}
+
 	d.nodeMaps[name] = na
 	return na, nil
 }
@@ -109,7 +113,6 @@ func (d *GPUUnitScheduler) Assume(nodes []string, pod *v1.Pod) ([]string, map[st
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	request := NewGPURequest(pod, d.coreName, d.memName)
 	res := make([]error, len(nodes))
 	ans := make([]bool, len(nodes))
 	nodeInfos := make([]*NodeAllocator, len(nodes))
@@ -139,7 +142,8 @@ func (d *GPUUnitScheduler) Assume(nodes []string, pod *v1.Pod) ([]string, map[st
 					if nodeInfos[number] == nil {
 						continue
 					}
-					ids, err := nodeInfos[number].Assume(request)
+					ids, err := nodeInfos[number].Assume(pod)
+					klog.Infof("assume: %s %v, err: %v", nodes[number], ids, err)
 					ans[number] = ids != nil
 					res[number] = err
 				default:
@@ -171,7 +175,6 @@ func (d *GPUUnitScheduler) Assume(nodes []string, pod *v1.Pod) ([]string, map[st
 func (d *GPUUnitScheduler) Score(nodes []string, pod *v1.Pod) []int {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	request := NewGPURequest(pod, d.coreName, d.memName)
 	scores := make([]int, len(nodes))
 	for i := 0; i < len(nodes); i++ {
 		ni, err := d.getNodeInfo(nodes[i])
@@ -180,7 +183,7 @@ func (d *GPUUnitScheduler) Score(nodes []string, pod *v1.Pod) []int {
 			scores[i] = ScoreMin
 			continue
 		}
-		scores[i] = ni.Score(request)
+		scores[i] = ni.Score(pod)
 	}
 	return scores
 }
@@ -193,7 +196,7 @@ func (d *GPUUnitScheduler) Bind(node string, pod *v1.Pod) (err error) {
 	if err != nil {
 		return err
 	}
-	ids, err := ni.Bind(NewGPURequest(pod, d.coreName, d.memName))
+	ids, err := ni.Allocate(pod)
 	if err != nil {
 		return err
 	}
@@ -240,30 +243,29 @@ func (d *GPUUnitScheduler) AddPod(pod *v1.Pod) error {
 	if _, ok := d.podMaps[pod.UID]; ok {
 		return nil
 	}
-	ni.AddPod(*pod)
+	ni.Add(pod, nil)
 	d.podMaps[pod.UID] = pod
 	return nil
 }
 
-func (d *GPUUnitScheduler) Release(pod *v1.Pod) error {
+func (d *GPUUnitScheduler) ForgetPod(pod *v1.Pod) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	ni, err := d.getNodeInfo(pod.Spec.NodeName)
-	if err != nil {
-		log.Errorf("release pod %s failed: %s", pod.Name, err.Error())
-		return err
+	if pod.Spec.NodeName != "" {
+		ni, err := d.getNodeInfo(pod.Spec.NodeName)
+		if err != nil {
+			return err
+		}
+		if err := ni.Forget(pod); err != nil {
+			return err
+		}
 	}
-	if _, ok := d.podMaps[pod.UID]; !ok {
-		log.Errorf("no such pod %s/%s", pod.Namespace, pod.Name)
-		return nil
+	if _, ok := d.podMaps[pod.UID]; ok {
+		delete(d.podMaps, pod.UID)
+		d.releasedPodMap[pod.UID] = struct{}{}
 	}
-	if err := ni.ForgetPod(*pod); err != nil {
-		log.Errorf("release pod %s failed: node info forget pod failed: %s", pod.Name, err.Error())
-		return err
-	}
-	delete(d.podMaps, pod.UID)
-	d.releasedPodMap[pod.UID] = struct{}{}
+
 	return nil
 }
 
@@ -274,21 +276,20 @@ func (d *GPUUnitScheduler) KnownPod(pod *v1.Pod) bool {
 	return ok
 }
 
-func (d *GPUUnitScheduler) PodReleased(pod *v1.Pod) bool {
+func (d *GPUUnitScheduler) ReleasedPod(pod *v1.Pod) bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	_, ok := d.releasedPodMap[pod.UID]
 	return ok
 }
 
-func (d *GPUUnitScheduler) Forget(pod *v1.Pod) error {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	delete(d.releasedPodMap, pod.UID)
-	delete(d.podMaps, pod.UID)
-
-	return nil
+func (d *GPUUnitScheduler) Status() string {
+	gpus := make(map[string]GPUs)
+	for k, v := range d.nodeMaps {
+		gpus[k] = v.GPUs
+	}
+	result, _ := json.Marshal(gpus)
+	return string(result)
 }
 
 func BuildResourceSchedulers(modes []string, config ElasticSchedulerConfig) (map[v1.ResourceName]ResourceScheduler, error) {
@@ -309,13 +310,13 @@ func BuildResourceSchedulers(modes []string, config ElasticSchedulerConfig) (map
 			}
 			sches[v1alpha1.ResourceGPUCore] = d
 			sches[v1alpha1.ResourceGPUMemory] = d
-		case "qgpu":
-			d, err := NewGPUUnitScheduler(config, v1alpha1.ResourceQGPUCore, v1alpha1.ResourceQGPUMemory)
-			if err != nil {
-				return nil, err
-			}
-			sches[v1alpha1.ResourceQGPUCore] = d
-			sches[v1alpha1.ResourceQGPUMemory] = d
+			//case "qgpu":
+			//	d, err := NewGPUUnitScheduler(config, v1alpha1.ResourceQGPUCore, v1alpha1.ResourceQGPUMemory)
+			//	if err != nil {
+			//		return nil, err
+			//	}
+			//	sches[v1alpha1.ResourceQGPUCore] = d
+			//	sches[v1alpha1.ResourceQGPUMemory] = d
 		}
 	}
 

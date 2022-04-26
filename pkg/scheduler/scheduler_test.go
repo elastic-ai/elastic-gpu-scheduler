@@ -18,9 +18,8 @@ func TestAssume(t *testing.T) {
 			},
 		},
 	}
-	ni := NewNodeAllocator(nil, node, v1alpha1.ResourceGPUCore, v1alpha1.ResourceGPUMemory, &Spread{})
-	req := NewGPURequest(&pods[0], v1alpha1.ResourceGPUCore, v1alpha1.ResourceGPUMemory)
-	option, _ := ni.Allocate(req)
+	ni, _ := NewNodeAllocator(nil, node, v1alpha1.ResourceGPUCore, v1alpha1.ResourceGPUMemory, &Spread{})
+	option, _ := ni.Allocate(&pods[0])
 	t.Logf("gpus: %v, allocated: %#v", ni.GPUs, option)
 }
 
