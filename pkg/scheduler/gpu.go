@@ -13,7 +13,7 @@ type GPUUnit struct {
 }
 
 func (g *GPUUnit) String() string {
-	return fmt.Sprintf("(%d, %d)", g.Core, g.Memory)
+	return fmt.Sprintf("(core: %d, memory: %d, gpu count: %d)", g.Core, g.Memory, g.GPUCount)
 }
 
 type GPU struct {

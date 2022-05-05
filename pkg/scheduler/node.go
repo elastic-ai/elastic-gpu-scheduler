@@ -122,9 +122,12 @@ func (ni *NodeAllocator) Allocate(pod *v1.Pod) (ids GPUIDs, err error) {
 //}
 
 func (ni *NodeAllocator) Forget(pod *v1.Pod) error {
+	klog.V(5).Infof("start to forget pod: %s, allocated pods cache: %+v", pod.Name, ni.podsMap)
 	if _, ok := ni.podsMap[pod.UID]; ok {
 		option := NewGPUOptionFromPod(pod, ni.CoreName, ni.MemName)
+		klog.V(5).Infof("cancel option %+v on %+v", option, ni.GPUs)
 		ni.GPUs.Cancel(option)
+		klog.V(5).Infof("gpus details: %+v", ni.GPUs)
 		delete(ni.podsMap, pod.UID)
 	}
 

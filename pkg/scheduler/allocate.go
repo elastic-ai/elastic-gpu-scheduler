@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 	"strconv"
 	"strings"
 )
@@ -36,6 +37,7 @@ func NewGPURequest(pod *v1.Pod, core v1.ResourceName, mem v1.ResourceName) GPURe
 	for i, c := range pod.Spec.Containers {
 		core := GetGPUCoreFromContainer(&c, core)
 		mem := GetGPUMemoryFromContainer(&c, mem)
+		klog.V(5).Infof("container %s core: %d, memory: %d", c.Name, core, mem)
 		if core == 0 && mem == 0 {
 			request[i].Core = NotNeedGPU
 			request[i].Memory = NotNeedGPU
@@ -51,6 +53,7 @@ func NewGPURequest(pod *v1.Pod, core v1.ResourceName, mem v1.ResourceName) GPURe
 		}
 	}
 
+	klog.V(5).Infof("pod %s gpu request: %+v", pod.Name, request)
 	return request
 }
 
@@ -73,8 +76,9 @@ func NewGPUOptionFromPod(pod *v1.Pod, core v1.ResourceName, mem v1.ResourceName)
 	request := NewGPURequest(pod, core, mem)
 	option := NewGPUOption(request)
 	for i, c := range pod.Spec.Containers {
-		if k, ok := pod.Annotations[fmt.Sprintf(utils.AnnotationEGPUContainer, c.Name)]; ok {
-			ids := strings.Split(pod.Annotations[k], ",")
+		if v, ok := pod.Annotations[fmt.Sprintf(utils.AnnotationEGPUContainer, c.Name)]; ok {
+			klog.V(5).Infof("container %s gpu key: %s", c.Name, v)
+			ids := strings.Split(v, ",")
 			idsInt := make([]int, 0)
 			for _, s := range ids {
 				id, _ := strconv.Atoi(s)
@@ -83,6 +87,7 @@ func NewGPUOptionFromPod(pod *v1.Pod, core v1.ResourceName, mem v1.ResourceName)
 			option.Allocated[i] = idsInt
 		}
 	}
+	klog.V(5).Infof("pod %s/%s allocated gpu: %d", pod.Namespace, pod.Name, option.Allocated)
 
 	return option
 }

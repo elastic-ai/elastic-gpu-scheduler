@@ -225,6 +225,7 @@ func (d *GPUUnitScheduler) Bind(node string, pod *v1.Pod) (err error) {
 	}, metav1.CreateOptions{}); err != nil {
 		return err
 	}
+	klog.V(5).Infof("update pod %s to pods cache %+v", newPod.Name, d.podMaps)
 	d.podMaps[pod.UID] = newPod
 
 	return nil
@@ -252,6 +253,7 @@ func (d *GPUUnitScheduler) ForgetPod(pod *v1.Pod) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
+	klog.V(5).Infof("forget pod %v on node %v", pod.Name, pod.Spec.NodeName)
 	if pod.Spec.NodeName != "" {
 		ni, err := d.getNodeInfo(pod.Spec.NodeName)
 		if err != nil {
