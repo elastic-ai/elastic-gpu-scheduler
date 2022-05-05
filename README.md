@@ -62,7 +62,7 @@ Add the following configuration to `extenders` section in the `--policy-config-f
 
 You can set a scheduling policy by running `kube-scheduler --policy-config-file <filename>` or `kube-scheduler --policy-configmap <ConfigMap>`. Here is a [scheduler policy config sample](https://github.com/kubernetes/examples/blob/master/staging/scheduler-policy/scheduler-policy-config.json).
 
-4. Create GPU pod
+4. Create pod sharing one GPU
 ```
 cat <<EOF  | kubectl create -f -
 apiVersion: apps/v1
@@ -88,6 +88,36 @@ spec:
           resources:
             limits:
               elasticgpu.io/gpu-memory: "256" // 256MB memory 
+EOF
+```
+
+5. Create pod with multiple GPU cards
+
+```
+cat <<EOF  | kubectl create -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cuda-gpu-test
+  labels:
+    app: gpu-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-test
+  template:
+    metadata:
+      labels:
+        app: gpu-test
+    spec:
+      containers:
+        - name: cuda
+          image: nvidia/cuda:10.0-base
+          command: [ "sleep", "100000" ]
+          resources:
+            limits:
+              elasticgpu.io/gpu-core: "200" // 2 GPU cards
 EOF
 ```
 
