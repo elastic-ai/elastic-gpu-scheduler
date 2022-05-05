@@ -39,7 +39,11 @@ $ kubectl apply -f deploy/elastic-gpu-scheduler.yaml
 ```
 
 3. Enable Kubernetes scheduler extender
-Add the following configuration to `extenders` section in the `--policy-config-file` file (`<elastic-gpu-scheduler-svc-clusterip>` is the cluster IP of `elastic-gpu-scheduler service`, which can be found by `kubectl get svc elastic-gpu-scheduler -n kube-system -o jsonpath='{.spec.clusterIP}' `):
+
+**Below Kubernetes v1.23**
+
+Add the following configuration to `extenders` section in the `--policy-config-file` file (`<elastic-gpu-scheduler-svc-clusterip>` is the cluster IP of `elastic-gpu-scheduler service`, which can be found by `kubectl get svc elastic-gpu-scheduler -n kube-system -o jsonpath='{.spec.clusterIP}' `).
+
 ```
 {
   "urlPrefix": "http://<elastic-gpu-scheduler-svc-clusterip>:39999/scheduler",
@@ -62,7 +66,30 @@ Add the following configuration to `extenders` section in the `--policy-config-f
 
 You can set a scheduling policy by running `kube-scheduler --policy-config-file <filename>` or `kube-scheduler --policy-configmap <ConfigMap>`. Here is a [scheduler policy config sample](https://github.com/kubernetes/examples/blob/master/staging/scheduler-policy/scheduler-policy-config.json).
 
+**From Kubernetes v1.23**
+
+Because of `--policy-config-file` flag for the kube-scheduler is not supported anymore. You can use  `--config=/etc/kubernetes/scheduler-policy-config.yaml` and create a file `scheduler-policy-config.yaml` compliant to KubeSchedulerConfiguration requirements.
+
+```
+apiVersion: kubescheduler.config.k8s.io/v1beta2
+kind: KubeSchedulerConfiguration
+clientConnection:
+  kubeconfig: /etc/kubernetes/scheduler.conf
+extenders:
+- urlPrefix: "http://<elastic-gpu-scheduler-svc-clusterip>:39999/scheduler"
+  filterVerb: filter
+  prioritizeVerb: priorities
+  bindVerb: bind
+  weight: 1
+  enableHTTPS: false
+  nodeCacheCapable: true
+  managedResources:
+  - name: elasticgpu.io/gpu-core
+  - name: elasticgpu.io/gpu-memory
+```
+
 4. Create pod sharing one GPU
+
 ```
 cat <<EOF  | kubectl create -f -
 apiVersion: apps/v1
