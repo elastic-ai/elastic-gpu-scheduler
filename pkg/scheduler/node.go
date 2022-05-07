@@ -93,8 +93,13 @@ func (ni *NodeAllocator) Allocate(pod *v1.Pod) (ids GPUIDs, err error) {
 	}
 
 	klog.Infof("allocated option: %+v", option)
-	ni.Add(pod, option)
-	delete(ni.allocated, key)
+	if err := ni.Add(pod, option); err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		delete(ni.allocated, key)
+	}()
 	return option.Allocated, nil
 }
 
@@ -140,12 +145,14 @@ func (ni *NodeAllocator) Forget(pod *v1.Pod) error {
 //	return
 //}
 
-func (ni *NodeAllocator) Add(pod *v1.Pod, option *GPUOption) {
+func (ni *NodeAllocator) Add(pod *v1.Pod, option *GPUOption) error {
 	if _, ok := ni.podsMap[pod.UID]; !ok {
 		ni.podsMap[pod.UID] = pod
 		if option == nil {
 			option = NewGPUOptionFromPod(pod, ni.CoreName, ni.MemName)
 		}
-		ni.GPUs.Transact(option)
+		return ni.GPUs.Transact(option)
 	}
+
+	return nil
 }
