@@ -48,14 +48,14 @@ func PredicateRoute(predicate *server.Predicate) httprouter.Handle {
 
 		if err := json.NewDecoder(body).Decode(&extenderArgs); err != nil {
 
-			log.Warning("Failed to parse request due to error ", err)
+			log.Warning("Failed to parse request due to error: %v", err)
 			extenderFilterResult = &extender.ExtenderFilterResult{
 				Nodes:       nil,
 				FailedNodes: nil,
 				Error:       err.Error(),
 			}
 		} else {
-			log.V(5).Infof("GpuSharingFilter ExtenderArgs: %v", extenderArgs)
+			log.V(5).Infof("GpuSharingFilter ExtenderArgs: %+v", extenderArgs)
 			if extenderArgs.NodeNames == nil {
 				extenderFilterResult = &extender.ExtenderFilterResult{
 					Nodes:       nil,
@@ -63,20 +63,19 @@ func PredicateRoute(predicate *server.Predicate) httprouter.Handle {
 					Error:       "elastic-gpu-scheduler extender must be configured with nodeCacheCapable=true",
 				}
 			} else {
-				log.Infof("start filter for pod %s/%s", extenderArgs.Pod.Namespace, extenderArgs.Pod.Name)
+				log.Infof("Start to filter for pod %s/%s", extenderArgs.Pod.Namespace, extenderArgs.Pod.Name)
 				extenderFilterResult = predicate.Handler(extenderArgs)
 			}
 		}
 
 		if resultBody, err := json.Marshal(extenderFilterResult); err != nil {
-			// panic(err)
-			log.Warningf("Failed due to %v", err)
+			log.Warningf("Failed to parse filter result: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())
 			w.Write([]byte(errMsg))
 		} else {
-			log.Info(predicate.Name, " extenderFilterResult = ", string(resultBody))
+			log.Infof("%s extenderFilterResult: %s", predicate.Name, string(resultBody))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(resultBody)
@@ -90,7 +89,7 @@ func PrioritizeRoute(prioritize *server.Prioritize) httprouter.Handle {
 
 		var buf bytes.Buffer
 		body := io.TeeReader(r.Body, &buf)
-		log.V(2).Info(prioritize.Name, " ExtenderArgs = ", buf.String())
+		log.V(5).Info(prioritize.Name, " ExtenderArgs = ", buf.String())
 
 		var extenderArgs extender.ExtenderArgs
 		var hostPriorityList *extender.HostPriorityList
@@ -99,7 +98,7 @@ func PrioritizeRoute(prioritize *server.Prioritize) httprouter.Handle {
 			panic(err)
 		}
 
-		log.Infof("start score for pod %s/%s", extenderArgs.Pod.Namespace, extenderArgs.Pod.Name)
+		log.Infof("Start to score for pod %s/%s", extenderArgs.Pod.Namespace, extenderArgs.Pod.Name)
 		if list, err := prioritize.Handler(extenderArgs); err != nil {
 			panic(err)
 		} else {
@@ -109,7 +108,7 @@ func PrioritizeRoute(prioritize *server.Prioritize) httprouter.Handle {
 		if resultBody, err := json.Marshal(hostPriorityList); err != nil {
 			panic(err)
 		} else {
-			log.Info(prioritize.Name, " hostPriorityList = ", string(resultBody))
+			log.Info("%s hostPriorityList: %s", prioritize.Name, string(resultBody))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(resultBody)
@@ -121,8 +120,6 @@ func BindRoute(bind *server.Bind) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		checkBody(w, r)
 
-		// mu.Lock()
-		// defer mu.Unlock()
 		var buf bytes.Buffer
 		body := io.TeeReader(r.Body, &buf)
 
@@ -135,8 +132,8 @@ func BindRoute(bind *server.Bind) httprouter.Handle {
 			}
 			failed = true
 		} else {
-			log.Infof("start bind pod %s/%s to node %s", extenderBindingArgs.PodNamespace, extenderBindingArgs.PodName, extenderBindingArgs.Node)
-			log.V(2).Info("GpuSharingBind ExtenderArgs =", extenderBindingArgs)
+			log.Infof("Start to bind pod %s/%s to node %s", extenderBindingArgs.PodNamespace, extenderBindingArgs.PodName, extenderBindingArgs.Node)
+			log.V(5).Info("GpuSharingBind ExtenderArgs =", extenderBindingArgs)
 			extenderBindingResult = bind.Handler(extenderBindingArgs)
 		}
 
@@ -145,7 +142,7 @@ func BindRoute(bind *server.Bind) httprouter.Handle {
 		}
 
 		if resultBody, err := json.Marshal(extenderBindingResult); err != nil {
-			log.Warning("Failed due to ", err)
+			log.Warning("Fail to parse bind result: %+v", err)
 			// panic(err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -175,9 +172,9 @@ func AddVersion(router *httprouter.Router) {
 
 func DebugLogging(h httprouter.Handle, path string) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-		log.V(4).Info(path, " request body = ", r.Body)
+		log.V(5).Infof("%s request method: %s, body: %+v", path, r.Method, r.Body)
 		h(w, r, p)
-		log.V(4).Info(path, " response=", w)
+		log.V(5).Infof("%s response: %+v", path, w)
 	}
 }
 
@@ -191,7 +188,7 @@ func AddPrioritize(router *httprouter.Router, prioritize *server.Prioritize) {
 
 func AddBind(router *httprouter.Router, bind *server.Bind) {
 	if handle, _, _ := router.Lookup("POST", bindPrefix); handle != nil {
-		log.Warning("AddBind was called more then once!")
+		log.Warning("AddBind was called more then once")
 	} else {
 		router.POST(bindPrefix, DebugLogging(BindRoute(bind), bindPrefix))
 	}
@@ -205,7 +202,7 @@ func AddStatus(router *httprouter.Router, sches map[v1.ResourceName]scheduler.Re
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if resultBody, err := json.Marshal(result); err != nil {
-			log.Warning("failed due to ", err)
+			log.Warning(" due to ", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			errMsg := fmt.Sprintf("{'error':'%s'}", err.Error())

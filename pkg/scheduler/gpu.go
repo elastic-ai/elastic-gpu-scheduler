@@ -63,7 +63,6 @@ func (g GPUs) String() string {
 }
 
 func (g GPUs) Trade(rater Rater, request GPURequest) (option *GPUOption, err error) {
-	klog.Infof("Trade: %s", request)
 	var (
 		dfs     func(i int)
 		indexes = make([][]int, len(request))
@@ -92,7 +91,7 @@ func (g GPUs) Trade(rater Rater, request GPURequest) (option *GPUOption, err err
 			option.Score = currScore
 			return
 		}
-		klog.Infof("start to allocate request: %#v, gpus: %#v", request[containerIndex], g)
+		klog.V(5).Infof("Start to allocate request on %d container: %+v, current gpus: %+v", containerIndex, request[containerIndex], g)
 		if request[containerIndex].GPUCount > 0 {
 			freeGPUs := g.GetFreeGPUs()
 			if len(freeGPUs) < request[containerIndex].GPUCount {
@@ -110,10 +109,10 @@ func (g GPUs) Trade(rater Rater, request GPURequest) (option *GPUOption, err err
 		}
 		for i, gpu := range g {
 			if !gpu.CanAllocate(request[containerIndex]) {
-				klog.Infof("cannot allocate request: %#v, gpu: %#v", request[containerIndex], gpu)
+				klog.Infof("Can't allocate request of %d container: %+v, current gpu: %+v", containerIndex, request[containerIndex], gpu)
 				continue
 			}
-			klog.Infof("allocate request: %#v, gpu: %#v", request[containerIndex], gpu)
+			klog.Infof("Start to allocate request of %d container: %+v, current gpu: %+v", containerIndex, request[containerIndex], gpu)
 			gpu.Add(request[containerIndex])
 			indexes[containerIndex] = make([]int, 1)
 			indexes[containerIndex][0] = i
@@ -152,35 +151,40 @@ func (g GPUs) Trade(rater Rater, request GPURequest) (option *GPUOption, err err
 //}
 
 func (g GPUs) Transact(option *GPUOption) error {
-	klog.V(5).Infof("gpu %+v transacts %+v", g, option)
+	klog.V(5).Infof("GPU %+v transacts %+v", g, option)
 	for i := 0; i < len(option.Allocated); i++ {
 		if option.Request[i].GPUCount > 0 {
 			for j := 0; j < len(option.Allocated[i]); j++ {
 				if !g[option.Allocated[i][j]].CanAllocate(option.Request[i]) {
-					klog.Errorf("can't trade option %v on %s because the GPU's residual memory or core can't satisfy the container", option, g)
-					return fmt.Errorf("can't trade option %v on %s because the GPU's residual memory or core can't satisfy the container", option, g)
+					klog.Errorf("Fail to trade option %+v on %s because the GPU's residual memory or core can't satisfy the container", option, g)
+					return fmt.Errorf("can't trade option %+v on %+v because the GPU's residual memory or core can't satisfy the container", option, g)
 				}
 				g[option.Allocated[i][j]].Add(option.Request[i])
 			}
 		} else {
-			if !g[option.Allocated[i][0]].CanAllocate(option.Request[i]) {
-				klog.Errorf("can't trade option %v on %s because the GPU's residual memory or core can't satisfy the container", option, g)
-				return fmt.Errorf("can't trade option %v on %s because the GPU's residual memory or core can't satisfy the container", option, g)
+			if len(option.Allocated[i]) > 0 {
+				if !g[option.Allocated[i][0]].CanAllocate(option.Request[i]) {
+					klog.Errorf("Fail to trade option %+v on %+v because the GPU's residual memory or core can't satisfy the container", option, g)
+					return fmt.Errorf("can't trade option %+v on %+v because the GPU's residual memory or core can't satisfy the container", option, g)
+				}
+				g[option.Allocated[i][0]].Add(option.Request[i])
 			}
-			g[option.Allocated[i][0]].Add(option.Request[i])
 		}
 	}
 	return nil
 }
 
 func (g GPUs) Cancel(option *GPUOption) error {
+	klog.V(5).Infof("Cancel option %+v on GPU %+v", option, g)
 	for i := 0; i < len(option.Request); i++ {
 		if option.Request[i].GPUCount > 0 {
 			for _, gpuIndex := range option.Allocated[i] {
 				g[gpuIndex].Sub(option.Request[i])
 			}
 		} else {
-			g[option.Allocated[i][0]].Sub(option.Request[i])
+			if len(option.Allocated[i]) > 0 {
+				g[option.Allocated[i][0]].Sub(option.Request[i])
+			}
 		}
 	}
 	return nil

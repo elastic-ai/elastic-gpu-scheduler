@@ -53,7 +53,7 @@ func NewNodeAllocator(pods []v1.Pod, node *v1.Node, core v1.ResourceName, mem v1
 		na.Add(&pods[i], nil)
 	}
 
-	klog.V(5).Infof("gpus of node %s: %+v", node.Name, na.GPUs)
+	klog.V(5).Infof("Node %s gpu allocation: %+v", node.Name, na.GPUs)
 
 	return na, nil
 }
@@ -87,19 +87,19 @@ func (ni *NodeAllocator) Score(pod *v1.Pod) int {
 func (ni *NodeAllocator) Allocate(pod *v1.Pod) (ids GPUIDs, err error) {
 	req := NewGPURequest(pod, ni.CoreName, ni.MemName)
 	key := req.Hash()
+	defer func() {
+		delete(ni.allocated, key)
+	}()
 	option, ok := ni.allocated[key]
 	if !ok {
-		return nil, fmt.Errorf("allocate %s on %s failed", req, ni.GPUs)
+		return nil, fmt.Errorf("cannot find option of GPU request %+v on %+v", req, ni.GPUs)
 	}
 
-	klog.Infof("allocated option: %+v", option)
+	klog.V(5).Infof("Pod %s/%s allocated option: %+v", pod.Namespace, pod.Name, option)
 	if err := ni.Add(pod, option); err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		delete(ni.allocated, key)
-	}()
 	return option.Allocated, nil
 }
 
@@ -127,12 +127,12 @@ func (ni *NodeAllocator) Allocate(pod *v1.Pod) (ids GPUIDs, err error) {
 //}
 
 func (ni *NodeAllocator) Forget(pod *v1.Pod) error {
-	klog.V(5).Infof("start to forget pod: %s, allocated pods cache: %+v", pod.Name, ni.podsMap)
+	klog.V(5).Infof("Start to forget pod %s/%s, allocation cache: %+v", pod.Namespace, pod.Name, ni.podsMap)
 	if _, ok := ni.podsMap[pod.UID]; ok {
 		option := NewGPUOptionFromPod(pod, ni.CoreName, ni.MemName)
-		klog.V(5).Infof("cancel option %+v on %+v", option, ni.GPUs)
+		klog.V(5).Infof("Cancel pod %s/%s option %+v on %+v", pod.Namespace, pod.Name, option, ni.GPUs)
 		ni.GPUs.Cancel(option)
-		klog.V(5).Infof("gpus details: %+v", ni.GPUs)
+		klog.V(5).Infof("Current GPU allocation of node %s: %+v", ni.Node.Name, ni.GPUs)
 		delete(ni.podsMap, pod.UID)
 	}
 
@@ -151,6 +151,8 @@ func (ni *NodeAllocator) Add(pod *v1.Pod, option *GPUOption) error {
 		if option == nil {
 			option = NewGPUOptionFromPod(pod, ni.CoreName, ni.MemName)
 		}
+
+		klog.V(5).Infof("Add pod %s/%s option: %+v", pod.Namespace, pod.Name, option)
 		return ni.GPUs.Transact(option)
 	}
 

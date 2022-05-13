@@ -98,7 +98,7 @@ func NewGPUUnitScheduler(config ElasticSchedulerConfig, coreName v1.ResourceName
 			continue
 		}
 		if _, err := di.getNodeInfo(pod.Spec.NodeName); err != nil {
-			log.Errorf("get node %s failed: %s", pod.Spec.NodeName, err.Error())
+			log.Errorf("Failed to get node %s: %s", pod.Spec.NodeName, err.Error())
 			continue
 		}
 	}
@@ -143,7 +143,7 @@ func (d *GPUUnitScheduler) Assume(nodes []string, pod *v1.Pod) ([]string, map[st
 						continue
 					}
 					ids, err := nodeInfos[number].Assume(pod)
-					klog.Infof("assume: %s %v, err: %v", nodes[number], ids, err)
+					klog.V(5).Infof("Assume pod %s/%s on node %s, GPU index: %+v, err: %v", pod.Namespace, pod.Name, nodes[number], ids, err)
 					ans[number] = ids != nil
 					res[number] = err
 				default:
@@ -164,11 +164,6 @@ func (d *GPUUnitScheduler) Assume(nodes []string, pod *v1.Pod) ([]string, map[st
 			failedNodes[nodes[i]] = res[i].Error()
 		}
 	}
-	// TODO: need remove
-	for _, n := range d.nodeMaps {
-		s, _ := json.Marshal(n.allocated)
-		klog.Infof("node allcated: %s", string(s))
-	}
 	return filterdNodes, failedNodes, nil
 }
 
@@ -179,7 +174,7 @@ func (d *GPUUnitScheduler) Score(nodes []string, pod *v1.Pod) []int {
 	for i := 0; i < len(nodes); i++ {
 		ni, err := d.getNodeInfo(nodes[i])
 		if err != nil {
-			log.Errorf("score pod %s/%s not found target node %s: %s", pod.Namespace, pod.Name, nodes[i], err.Error())
+			log.Errorf("Fail to score pod %s/%s because not found target node %s: %s", pod.Namespace, pod.Name, nodes[i], err.Error())
 			scores[i] = ScoreMin
 			continue
 		}
@@ -253,7 +248,7 @@ func (d *GPUUnitScheduler) ForgetPod(pod *v1.Pod) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	klog.V(5).Infof("forget pod %v on node %v", pod.Name, pod.Spec.NodeName)
+	klog.V(5).Infof("Forget pod %s/%s on node %v", pod.Namespace, pod.Name, pod.Spec.NodeName)
 	if pod.Spec.NodeName != "" {
 		ni, err := d.getNodeInfo(pod.Spec.NodeName)
 		if err != nil {
@@ -335,5 +330,5 @@ func GetResourceScheduler(pod *v1.Pod, registeredSchedulers map[v1.ResourceName]
 		}
 	}
 
-	return nil, fmt.Errorf("cannot find scheduler for pod: %v", pod)
+	return nil, fmt.Errorf("cannot find scheduler for pod %s/%s", pod.Namespace, pod.Name)
 }
