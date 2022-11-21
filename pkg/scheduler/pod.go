@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-
-	"elasticgpu.io/elastic-gpu-scheduler/pkg/utils"
-	"elasticgpu.io/elastic-gpu/api/v1alpha1"
+  "elasticgpu.io/elastic-gpu-scheduler/pkg/utils"
+	"elasticgpu.io/elastic-gpu/apis/elasticgpu/v1alpha1"
 )
 
 func IsCompletedPod(pod *v1.Pod) bool {

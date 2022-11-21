@@ -2,7 +2,7 @@ package utils
 
 import (
 	"bytes"
-	"elasticgpu.io/elastic-gpu/clientset/versioned"
+	"elasticgpu.io/elastic-gpu/client/clientset/versioned"
 	"encoding/gob"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
