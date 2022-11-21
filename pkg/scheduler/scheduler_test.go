@@ -1,7 +1,7 @@
 package scheduler
 
 import (
-	"elasticgpu.io/elastic-gpu/api/v1alpha1"
+	"elasticgpu.io/elastic-gpu/apis/elasticgpu/v1alpha1"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"

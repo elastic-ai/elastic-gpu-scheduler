@@ -12,4 +12,4 @@ require (
 	k8s.io/kube-scheduler v0.18.0
 )
 
-replace elasticgpu.io/elastic-gpu => ../elastic-gpu
+replace elasticgpu.io/elastic-gpu => github.com/elastic-ai/elastic-gpu v0.0.0-20220606065143-94fc37efd8cc

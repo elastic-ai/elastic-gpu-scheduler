@@ -2,8 +2,8 @@ package scheduler
 
 import (
 	"context"
-	"elasticgpu.io/elastic-gpu/api/v1alpha1"
-	"elasticgpu.io/elastic-gpu/clientset/versioned"
+	"elasticgpu.io/elastic-gpu/apis/elasticgpu/v1alpha1"
+	"elasticgpu.io/elastic-gpu/client/clientset/versioned"
 	"encoding/json"
 	"fmt"
 	"k8s.io/client-go/kubernetes"
