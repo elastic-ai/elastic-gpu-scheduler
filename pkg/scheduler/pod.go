@@ -2,16 +2,15 @@ package scheduler
 
 import (
 	"context"
-	"elasticgpu.io/elastic-gpu-scheduler/pkg/utils"
-	"elasticgpu.io/elastic-gpu/apis/elasticgpu/v1alpha1"
 	"fmt"
+	"strconv"
+	"strings"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"strconv"
-	"strings"
-
-	v1 "k8s.io/api/core/v1"
+  "elasticgpu.io/elastic-gpu-scheduler/pkg/utils"
+	"elasticgpu.io/elastic-gpu/apis/elasticgpu/v1alpha1"
 )
 
 func IsCompletedPod(pod *v1.Pod) bool {
@@ -26,18 +25,20 @@ func IsCompletedPod(pod *v1.Pod) bool {
 }
 
 func IsGPUPod(pod *v1.Pod) bool {
-	if GetResourceRequests(pod, v1alpha1.ResourceGPUCore) > 0 || GetResourceRequests(pod, v1alpha1.ResourceGPUMemory) > 0 {
+	if IsResourceExists(pod, v1alpha1.ResourceGPUCore) || IsResourceExists(pod, v1alpha1.ResourceGPUMemory) ||
+		IsResourceExists(pod, v1alpha1.ResourceQGPUCore) || IsResourceExists(pod, v1alpha1.ResourceQGPUMemory) ||
+		IsResourceExists(pod, v1alpha1.ResourcePGPU) {
 		return true
 	}
+	return false
+}
 
-	if GetResourceRequests(pod, v1alpha1.ResourceQGPUCore) > 0 || GetResourceRequests(pod, v1alpha1.ResourceQGPUMemory) > 0 {
-		return true
+func IsResourceExists(pod *v1.Pod, resourceName v1.ResourceName) bool {
+	for _, container := range pod.Spec.Containers {
+		if _, ok := container.Resources.Limits[resourceName]; ok {
+			return true
+		}
 	}
-
-	if GetResourceRequests(pod, v1alpha1.ResourcePGPU) > 0 {
-		return true
-	}
-
 	return false
 }
 
